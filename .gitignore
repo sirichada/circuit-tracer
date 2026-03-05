@@ -79,6 +79,7 @@ target/
 .ipynb_checkpoints
 demos/**/graphs
 demos/**/graph_files
+demos/**/*.json
 
 # IPython
 profile_default/
@@ -177,3 +178,6 @@ cython_debug/
 
 *.parquet
 .vscode/
+__pycache__/
+*.py[cod]
+*$py.class
