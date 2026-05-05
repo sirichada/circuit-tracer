@@ -80,6 +80,7 @@ target/
 demos/**/graphs
 demos/**/graph_files
 demos/**/*.json
+experiment/graphs
 
 # IPython
 profile_default/
