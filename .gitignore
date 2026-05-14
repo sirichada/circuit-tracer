@@ -81,6 +81,8 @@ demos/**/graphs
 demos/**/graph_files
 demos/**/*.json
 experiment/graphs
+.DS_Store
+./github
 
 # IPython
 profile_default/
