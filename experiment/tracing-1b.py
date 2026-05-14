@@ -13,9 +13,9 @@ WIDTH = "16k"
 L0 = "small"
 
 transcoder_paths = {}
-for layer in range(34):
+for layer in range(26):
     path = hf_hub_download(
-        repo_id="google/gemma-scope-2-4b-pt",
+        repo_id="google/gemma-scope-2-1b-pt",
         filename=f"transcoder_all/layer_{layer}_width_{WIDTH}_l0_{L0}/params.safetensors"
     )
     transcoder_paths[layer] = path
@@ -27,7 +27,7 @@ import torch
 
 transcoder_set = load_transcoder_set(
     transcoder_paths=transcoder_paths,
-    scan="gemma-scope-2-4b-pt",
+    scan="gemma-scope-2-1b-pt",
     feature_input_hook="hook_resid_mid",
     feature_output_hook="hook_mlp_out",
     device=torch.device("cuda" if torch.cuda.is_available() else "cpu"),
@@ -36,10 +36,10 @@ transcoder_set = load_transcoder_set(
     special_load_fn="gemma-scope-2",
 )
 
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-3-4b-pt")
+tokenizer = AutoTokenizer.from_pretrained("google/gemma-3-1b-pt")
 
 model = ReplacementModel.from_pretrained_and_transcoders(
-    model_name="google/gemma-3-4b-pt",
+    model_name="google/gemma-3-1b-pt",
     transcoders=transcoder_set,
     backend="transformerlens",
     dtype=torch.bfloat16,
@@ -54,7 +54,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 
 # GRAPH_DIR = "./graphs/gemma-3-4b"
-GRAPH_DIR = "./circuit-tracer/experiment/graphs/gemma-3-4b"
+GRAPH_DIR = "./circuit-tracer/experiment/graphs/gemma-3-1bb"
 RHYME_TOKEN = "it"
 RHYME_STEP = 9
 PLANNING_WINDOW_START = 0
