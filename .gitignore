@@ -83,6 +83,7 @@ demos/**/*.json
 experiment/graphs
 .DS_Store
 ./github
+experiment/tracing
 
 # IPython
 profile_default/
