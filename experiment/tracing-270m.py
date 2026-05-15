@@ -6,11 +6,19 @@ from circuit_tracer import ReplacementModel, attribute
 from circuit_tracer.utils import create_graph_files
 import torch
 import torch.nn.functional as F
+import json
+
+from downstream_effects_addon import (
+    measure_downstream_effects_batch,
+    analyze_downstream_effects,
+    save_downstream_effects_to_json
+)
 
 from huggingface_hub import hf_hub_download
 
 WIDTH = "16k"
 L0 = "small"
+output_data = {}
 
 transcoder_paths = {}
 for layer in range(18):
@@ -53,7 +61,7 @@ import requests
 from collections import defaultdict, Counter
 from pathlib import Path
 
-GRAPH_DIR = "./graphs/gemma-3-270m"
+GRAPH_DIR = "/teamspace/studios/this_studio/circuit-tracer/experiment/graphs/gemma-3-270m"
 RHYME_TOKEN = "it"
 RHYME_STEP = 19
 PLANNING_WINDOW_START = 0
@@ -407,22 +415,179 @@ for band_name, feats in bands.items():
 
 print()
 print("=" * 70)
-print("INTERVENTION RESULTS (suppress at peak step)")
+print("DOWNSTREAM EFFECTS MEASUREMENT (suppress at peak step)")
 print("=" * 70)
-
+ 
 prompt = "In the final step, everything came to it"
-
-for candidate in candidates[:5]:
-    layer, feat = candidate["feat_key"]
-    peak_step = candidate["peak_step"]
-
-    intervention = [(layer, peak_step, feat % 16384, 0.0)]
-    result = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)[0]
-
-    if "it" not in result[-30:]:
-        print(f"L{layer} F{feat}: BREAKS RHYME when suppressed at step {peak_step}")
-    else:
-        print(f"L{layer} F{feat}: no effect")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ 
+print("\nGenerating baseline output without intervention...")
+baseline_output = model.generate(prompt, max_new_tokens=20, do_sample=False)[0]
+print(f"Baseline: {baseline_output}\n")
+ 
+downstream_results = measure_downstream_effects_batch(
+    model=model,
+    prompt=prompt,
+    candidates_list=candidates,
+    suppression_step_key='peak_step',
+    device=device,
+    tokenizer=tokenizer,
+    RHYME_TOKEN=RHYME_TOKEN,
+    max_new_tokens=20,
+    max_candidates=50
+)
+ 
+analyzed_results = analyze_downstream_effects(downstream_results, top_n=20)
+ 
+save_downstream_effects_to_json(
+    downstream_results,
+    analyzed_results,
+    "downstream_effects_results_peak_step.json"
+)
+ 
+print("\n" + "=" * 100)
+print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES BY PROBABILITY DROP")
+print("=" * 100)
+ 
+sorted_by_prob_drop = sorted(downstream_results, key=lambda x: -x['prob_drop'])
+ 
+for i, result in enumerate(sorted_by_prob_drop[:10], 1):
+    layer = result['layer']
+    feat = result['feat']
+    suppression_step = result['suppression_step']
+    
+    intervention = [(layer, suppression_step, feat, 0.0)]
+    post_intervention_output = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)[0]
+    
+    print(f"\n{i}. L{layer:2d} F{feat:5d} (suppress @ step {suppression_step:2d})")
+    print(f"   P(rhyme): {result['original_prob']:.4f} → {result['suppressed_prob']:.4f}  (drop: {result['prob_drop_pct']:.1f}%)")
+    print(f"   Rank: {result['original_rank']:3d} → {result['suppressed_rank']:3d}  (shift: {result['rank_shift']:+4d})")
+    print(f"   Baseline:         {baseline_output}")
+    print(f"   Post-intervention: {post_intervention_output}")
+ 
+ 
+print("\n" + "=" * 100)
+print("MEASURING DOWNSTREAM EFFECTS - SUPPRESSION AT FIRST STEP")
+print("=" * 100)
+ 
+downstream_results_first = measure_downstream_effects_batch(
+    model=model,
+    prompt=prompt,
+    candidates_list=candidates,
+    suppression_step_key='first_step',
+    device=device,
+    tokenizer=tokenizer,
+    RHYME_TOKEN=RHYME_TOKEN,
+    max_new_tokens=20,
+    max_candidates=30
+)
+ 
+analyzed_results_first = analyze_downstream_effects(downstream_results_first, top_n=15)
+ 
+save_downstream_effects_to_json(
+    downstream_results_first,
+    analyzed_results_first,
+    "downstream_effects_results_first_step.json"
+)
+ 
+print("\n" + "=" * 100)
+print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)")
+print("=" * 100)
+ 
+sorted_by_prob_drop_first = sorted(downstream_results_first, key=lambda x: -x['prob_drop'])
+ 
+for i, result in enumerate(sorted_by_prob_drop_first[:8], 1):
+    layer = result['layer']
+    feat = result['feat']
+    suppression_step = result['suppression_step']
+    
+    intervention = [(layer, suppression_step, feat, 0.0)]
+    post_intervention_output = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)[0]
+    
+    print(f"\n{i}. L{layer:2d} F{feat:5d} (suppress @ step {suppression_step:2d})")
+    print(f"   P(rhyme): {result['original_prob']:.4f} → {result['suppressed_prob']:.4f}  (drop: {result['prob_drop_pct']:.1f}%)")
+    print(f"   Rank: {result['original_rank']:3d} → {result['suppressed_rank']:3d}  (shift: {result['rank_shift']:+4d})")
+    print(f"   Baseline:         {baseline_output}")
+    print(f"   Post-intervention: {post_intervention_output}")
+ 
+ 
+print("\n" + "=" * 100)
+print("COMPARING SUPPRESSION STRATEGIES")
+print("=" * 100)
+ 
+feature_set_peak = set((r['layer'], r['feat']) for r in downstream_results)
+feature_set_first = set((r['layer'], r['feat']) for r in downstream_results_first)
+shared_features = feature_set_peak & feature_set_first
+ 
+print(f"Features tested with peak_step suppression: {len(feature_set_peak)}")
+print(f"Features tested with first_step suppression: {len(feature_set_first)}")
+print(f"Features tested with both strategies: {len(shared_features)}")
+ 
+if shared_features:
+    print("\nComparison of suppression strategies (shared features):")
+    
+    peak_results_map = {(r['layer'], r['feat']): r for r in downstream_results}
+    first_results_map = {(r['layer'], r['feat']): r for r in downstream_results_first}
+    
+    comparisons = []
+    for layer, feat in sorted(list(shared_features)):
+        peak_r = peak_results_map[(layer, feat)]
+        first_r = first_results_map[(layer, feat)]
+        
+        comparisons.append({
+            'layer': layer,
+            'feat': feat,
+            'peak_prob_drop': peak_r['prob_drop'],
+            'first_prob_drop': first_r['prob_drop'],
+            'peak_rank_shift': peak_r['rank_shift'],
+            'first_rank_shift': first_r['rank_shift'],
+        })
+    
+    comparisons_sorted = sorted(comparisons, key=lambda x: -(abs(x['peak_prob_drop'] - x['first_prob_drop'])))
+    
+    for i, comp in enumerate(comparisons_sorted[:15], 1):
+        print(f"{i:2d}. L{comp['layer']:2d} F{comp['feat']:5d}")
+        print(f"    Peak step:  prob_drop={comp['peak_prob_drop']:.4f}  rank_shift={comp['peak_rank_shift']:+4d}")
+        print(f"    First step: prob_drop={comp['first_prob_drop']:.4f}  rank_shift={comp['first_rank_shift']:+4d}")
+        print(f"    Difference: prob_drop_delta={abs(comp['peak_prob_drop'] - comp['first_prob_drop']):.4f}")
+ 
+ 
+output_data_with_downstream = output_data.copy()
+output_data_with_downstream["downstream_effects"] = {
+    "peak_step_suppression": {
+        "results_count": len(downstream_results),
+        "aggregate": analyzed_results["aggregate"],
+        "top_by_prob_drop": [
+            {
+                "layer": r["layer"],
+                "feat": r["feat"],
+                "prob_drop": float(r["prob_drop"]),
+                "prob_drop_pct": float(r["prob_drop_pct"]),
+                "rank_shift": int(r["rank_shift"]),
+            }
+            for r in analyzed_results['sorted_by_prob_drop'][:30]
+        ]
+    },
+    "first_step_suppression": {
+        "results_count": len(downstream_results_first),
+        "aggregate": analyzed_results_first["aggregate"],
+        "top_by_prob_drop": [
+            {
+                "layer": r["layer"],
+                "feat": r["feat"],
+                "prob_drop": float(r["prob_drop"]),
+                "prob_drop_pct": float(r["prob_drop_pct"]),
+                "rank_shift": int(r["rank_shift"]),
+            }
+            for r in analyzed_results_first['sorted_by_prob_drop'][:30]
+        ]
+    }
+}
+ 
+with open("circuit_tracing_results_with_downstream.json", "w") as f:
+    json.dump(output_data_with_downstream, f, indent=2)
+ 
+print("\nCombined results saved to circuit_tracing_results_with_downstream.json")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
