@@ -418,13 +418,18 @@ print("=" * 70)
 print("DOWNSTREAM EFFECTS MEASUREMENT (suppress at peak step)")
 print("=" * 70)
  
-prompt = "In the final step, everything came to it"
+prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\n"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
 print("\nGenerating baseline output without intervention...")
 baseline_output = model.generate(prompt, max_new_tokens=20, do_sample=False)[0]
 print(f"Baseline: {baseline_output}\n")
- 
+
+test_intervention = [(17, 0, 10510, 0.0)]
+test_inputs = model.tokenizer("test", return_tensors="pt").to(device)
+result = model._get_feature_intervention_hooks(test_inputs["input_ids"], test_intervention)
+print(type(result), len(result), [type(x) for x in result])
+
 downstream_results = measure_downstream_effects_batch(
     model=model,
     prompt=prompt,

@@ -3,99 +3,66 @@ import torch.nn.functional as F
 from collections import defaultdict
 import json  # Fixed: Added missing import
 
-def get_rhyme_token_logits(model, prompt, device, max_new_tokens=20):
-    """
-    Generate and return logits at the rhyme token position without intervention.
-    Returns: (logits, generated_text, rhyme_token_id)
-    """
-    # model.tokenizer is used here as it is an attribute of ReplacementModel
-    inputs = model.tokenizer(prompt, return_tensors="pt").to(device)
-    
-    with torch.no_grad():
-        # In circuit-tracer's TransformerLens backend, model.model is the TransformerLens object
-        outputs = model.model(
-            input_ids=inputs["input_ids"],
-            output_hidden_states=False,
-            return_dict=True
-        )
-        logits = outputs.logits[:, -1, :]
-    
-    generated = model.generate(prompt, max_new_tokens=max_new_tokens, do_sample=False)[0]
-    # RHYME_TOKEN is not defined globally here, assuming it should be passed or fixed
-    # For compatibility with your script, we rely on the RHYME_TOKEN logic in measure_downstream_effects_single_feature
-    return logits, generated
-
-
-def measure_downstream_effects_single_feature(model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens=20):
-    """
-    Measure downstream effects of suppressing a single feature.
-    """
-    
-    # Handle token encoding (Ensuring we get the ID for the target word)
+def measure_downstream_effects_single_feature(
+    model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens=20
+):
     rhyme_token_id = tokenizer.encode(RHYME_TOKEN, add_special_tokens=False)[0]
-    
     inputs = model.tokenizer(prompt, return_tensors="pt").to(device)
-    input_ids = inputs["input_ids"]
-    
-    # Baseline Prediction
+    input_ids = inputs["input_ids"]  # shape [1, seq_len] — keep as 2D
+
+    tl_model = model  # ReplacementModel IS the HookedTransformer
+
+    # Baseline logits
     with torch.no_grad():
-        # Use model.model to access the underlying TransformerLens instance
-        outputs_original = model.model(
-            input_ids=input_ids,
-            output_hidden_states=False,
-            return_dict=True
-        )
-        logits_original = outputs_original.logits[:, -1, :]
-        probs_original = F.softmax(logits_original, dim=-1)
-    
-    # Intervention Setup
+        logits_full = tl_model(input_ids)        # [1, seq, vocab]
+        logits_original = logits_full[0, -1, :].unsqueeze(0)  # [1, vocab]
+    probs_original = F.softmax(logits_original, dim=-1)
+
+    # Confirm text change
     intervention = [(layer, suppression_step, feat, 0.0)]
-    
-    # Generate text with intervention
-    generated_suppressed = model.feature_intervention_generate(
-        prompt,
-        intervention,
-        max_new_tokens=max_new_tokens,
-        do_sample=False
-    )[0]
-    
-    # Measure Logits with intervention
+    hook_result = model._get_feature_intervention_hooks(input_ids, intervention)
+    hooks = hook_result[0]
+
     with torch.no_grad():
-        outputs_suppressed = model.model(
-            input_ids=input_ids,
-            output_hidden_states=False,
-            return_dict=True
+        logits_full_sup = model.run_with_hooks(
+            input_ids,
+            fwd_hooks=hooks
         )
-        logits_suppressed = outputs_suppressed.logits[:, -1, :]
-        probs_suppressed = F.softmax(logits_suppressed, dim=-1)
-    
+        logits_suppressed = logits_full_sup[0, -1, :].unsqueeze(0)
+    probs_suppressed = F.softmax(logits_suppressed, dim=-1)
+
+    # Confirm text change (reuse same intervention)
+    generated_suppressed = model.feature_intervention_generate(
+        prompt, intervention, max_new_tokens=max_new_tokens, do_sample=False
+    )[0]
+
     # Probability and Rank Analysis
     original_prob = probs_original[0, rhyme_token_id].item()
     suppressed_prob = probs_suppressed[0, rhyme_token_id].item()
     prob_drop = original_prob - suppressed_prob
-    
+
     original_sorted_probs, original_sorted_indices = torch.sort(probs_original[0], descending=True)
     original_rank = (original_sorted_indices == rhyme_token_id).nonzero(as_tuple=True)[0].item()
-    
+
     suppressed_sorted_probs, suppressed_sorted_indices = torch.sort(probs_suppressed[0], descending=True)
     suppressed_rank = (suppressed_sorted_indices == rhyme_token_id).nonzero(as_tuple=True)[0].item()
-    
+
     rank_shift = original_rank - suppressed_rank
-    
+
     # Top Token Decoding
     original_top5_indices = original_sorted_indices[:5].tolist()
     original_top5_tokens = [tokenizer.decode([idx]) for idx in original_top5_indices]
     original_top5_probs = original_sorted_probs[:5].tolist()
-    
+
     suppressed_top5_indices = suppressed_sorted_indices[:5].tolist()
     suppressed_top5_tokens = [tokenizer.decode([idx]) for idx in suppressed_top5_indices]
     suppressed_top5_probs = suppressed_sorted_probs[:5].tolist()
-    
+
     # Entropy Calculations
     original_entropy = -(probs_original[0] * torch.log(probs_original[0] + 1e-10)).sum().item()
     suppressed_entropy = -(probs_suppressed[0] * torch.log(probs_suppressed[0] + 1e-10)).sum().item()
     entropy_increase = suppressed_entropy - original_entropy
-    
+
     return {
         "layer": layer,
         "feat": feat,
@@ -114,6 +81,7 @@ def measure_downstream_effects_single_feature(model, prompt, layer, feat, suppre
         "original_entropy": original_entropy,
         "suppressed_entropy": suppressed_entropy,
         "entropy_increase": entropy_increase,
+        "generated_suppressed": generated_suppressed,
     }
 
 
