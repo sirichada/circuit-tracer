@@ -10,8 +10,7 @@ import json
 
 from downstream_effects_addon import (
     measure_downstream_effects_batch,
-    analyze_downstream_effects,
-    save_downstream_effects_to_json
+    analyze_downstream_effects
 )
 
 from huggingface_hub import hf_hub_download
@@ -408,6 +407,52 @@ for band_name, feats in bands.items():
         peak_s = max(feature_timeline[lf], key=feature_timeline[lf].get)
         print(f"    L{lf[0]:2d} F{lf[1]:5d}  peak_norm_inf={peak_inf:.4f} @ step{peak_s}")
 
+# ══════════════════════════════════════════════════════════════════════════════
+# CELL 10 — Dump feature statistics for downstream analysis
+# ══════════════════════════════════════════════════════════════════════════════
+
+output_data = {
+    "config": {
+        "graph_dir": GRAPH_DIR,
+        "rhyme_step": RHYME_STEP,
+        "influence_threshold": INFLUENCE_THRESHOLD,
+        "early_cutoff": early_cutoff,
+        "mid_cutoff": mid_cutoff,
+    },
+    "statistics": {
+        "n_steps": len(all_step_indices),
+        "n_unique_features": len(feature_timeline),
+        "n_planning_features": len(planning_features),
+        "n_execution_features": len(execution_features),
+        "n_candidates": len(candidates),
+        "n_early_spikes": len(early_spikes),
+    },
+    "candidates": [
+        {
+            "layer": c["feat_key"][0],
+            "feat": c["feat_key"][1],
+            "first_step": c["first_step"],
+            "peak_step": c["peak_step"],
+            "peak_val": float(c["peak_val"]),
+            "rhyme_val": float(c["rhyme_val"]),
+            "sustain_ratio": float(c["sustain_ratio"]),
+            "rhyme_percentile": float(c["rhyme_percentile"]),
+        }
+        for c in candidates
+    ],
+    "early_spikes": [
+        {
+            "layer": e["feat_key"][0],
+            "feat": e["feat_key"][1],
+            "early_spike_step": e["early_spike_step"],
+            "peak_step": e["peak_step"],
+            "peak_val": float(e["peak_val"]),
+            "rhyme_val": float(e["rhyme_val"]),
+            "sustain_ratio": float(e["sustain_ratio"]),
+        }
+        for e in early_spikes
+    ],
+}
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CELL 8 — Interventions on candidates at their peak step
@@ -443,12 +488,6 @@ downstream_results = measure_downstream_effects_batch(
 )
  
 analyzed_results = analyze_downstream_effects(downstream_results, top_n=20)
- 
-save_downstream_effects_to_json(
-    downstream_results,
-    analyzed_results,
-    "downstream_effects_results_peak_step.json"
-)
  
 print("\n" + "=" * 100)
 print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES BY PROBABILITY DROP")
@@ -488,12 +527,6 @@ downstream_results_first = measure_downstream_effects_batch(
 )
  
 analyzed_results_first = analyze_downstream_effects(downstream_results_first, top_n=15)
- 
-save_downstream_effects_to_json(
-    downstream_results_first,
-    analyzed_results_first,
-    "downstream_effects_results_first_step.json"
-)
  
 print("\n" + "=" * 100)
 print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)")
@@ -589,10 +622,10 @@ output_data_with_downstream["downstream_effects"] = {
     }
 }
  
-with open("circuit_tracing_results_with_downstream.json", "w") as f:
+with open("circuit_tracing_results_270m.json", "w") as f:
     json.dump(output_data_with_downstream, f, indent=2)
  
-print("\nCombined results saved to circuit_tracing_results_with_downstream.json")
+print("\nCombined results saved to circuit_tracing_results_270m.json")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -667,56 +700,3 @@ for layer, feat, break_step, description in breaking_features:
         print(f"    Top tokens: {tokens}")
     except Exception as e:
         print(f"\nL{layer:2d} F{feat:5d}  ERROR: {e}")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 10 — Dump feature statistics for downstream analysis
-# ══════════════════════════════════════════════════════════════════════════════
-
-output_data = {
-    "config": {
-        "graph_dir": GRAPH_DIR,
-        "rhyme_step": RHYME_STEP,
-        "influence_threshold": INFLUENCE_THRESHOLD,
-        "early_cutoff": early_cutoff,
-        "mid_cutoff": mid_cutoff,
-    },
-    "statistics": {
-        "n_steps": len(all_step_indices),
-        "n_unique_features": len(feature_timeline),
-        "n_planning_features": len(planning_features),
-        "n_execution_features": len(execution_features),
-        "n_candidates": len(candidates),
-        "n_early_spikes": len(early_spikes),
-    },
-    "candidates": [
-        {
-            "layer": c["feat_key"][0],
-            "feat": c["feat_key"][1],
-            "first_step": c["first_step"],
-            "peak_step": c["peak_step"],
-            "peak_val": float(c["peak_val"]),
-            "rhyme_val": float(c["rhyme_val"]),
-            "sustain_ratio": float(c["sustain_ratio"]),
-            "rhyme_percentile": float(c["rhyme_percentile"]),
-        }
-        for c in candidates
-    ],
-    "early_spikes": [
-        {
-            "layer": e["feat_key"][0],
-            "feat": e["feat_key"][1],
-            "early_spike_step": e["early_spike_step"],
-            "peak_step": e["peak_step"],
-            "peak_val": float(e["peak_val"]),
-            "rhyme_val": float(e["rhyme_val"]),
-            "sustain_ratio": float(e["sustain_ratio"]),
-        }
-        for e in early_spikes
-    ],
-}
-
-with open("circuit_tracing_results.json", "w") as f:
-    json.dump(output_data, f, indent=2)
-
-print("\nResults saved to circuit_tracing_results.json")
