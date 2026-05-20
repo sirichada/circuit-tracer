@@ -622,10 +622,59 @@ output_data_with_downstream["downstream_effects"] = {
     }
 }
  
-with open("circuit_tracing_results_270m.json", "w") as f:
-    json.dump(output_data_with_downstream, f, indent=2)
- 
-print("\nCombined results saved to circuit_tracing_results_270m.json")
+# Force ensure everything is a standard Python primitive before dumping
+def sanitize_for_json(obj):
+    if hasattr(obj, 'item'): # Catches PyTorch/NumPy scalars
+        return obj.item()
+    elif isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_for_json(x) for x in obj]
+    return obj
+
+try:
+    output_data_with_downstream = output_data.copy()
+    output_data_with_downstream["downstream_effects"] = {
+        "peak_step_suppression": {
+            "results_count": len(downstream_results),
+            "aggregate": sanitize_for_json(analyzed_results.get("aggregate", {})),
+            "top_by_prob_drop": [
+                {
+                    "layer": int(r["layer"]),
+                    "feat": int(r["feat"]),
+                    "prob_drop": float(r["prob_drop"]),
+                    "prob_drop_pct": float(r["prob_drop_pct"]),
+                    "rank_shift": int(r["rank_shift"]),
+                }
+                for r in analyzed_results.get('sorted_by_prob_drop', [])[:30]
+            ]
+        },
+        "first_step_suppression": {
+            "results_count": len(downstream_results_first),
+            "aggregate": sanitize_for_json(analyzed_results_first.get("aggregate", {})),
+            "top_by_prob_drop": [
+                {
+                    "layer": int(r["layer"]),
+                    "feat": int(r["feat"]),
+                    "prob_drop": float(r["prob_drop"]),
+                    "prob_drop_pct": float(r["prob_drop_pct"]),
+                    "rank_shift": int(r["rank_shift"]),
+                }
+                for r in analyzed_results_first.get('sorted_by_prob_drop', [])[:30]
+            ]
+        }
+    }
+    
+    with open("circuit_tracing_results_270m.json", "w") as f:
+        json.dump(output_data_with_downstream, f, indent=2)
+     
+    print("\nCombined results successfully saved to circuit_tracing_results_270m.json")
+
+except Exception as e:
+    print(f"\nERROR: Failed to write JSON file: {e}")
+    # Fallback: save what we have so we don't lose the whole script's progress
+    with open("circuit_tracing_results_270m_fallback.json", "w") as f:
+        json.dump({"status": "failed_downstream_formatting", "config": output_data.get("config")}, f)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
