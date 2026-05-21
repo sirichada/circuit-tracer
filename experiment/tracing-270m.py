@@ -480,9 +480,9 @@ baseline_output = model.feature_intervention_generate(prompt, [], do_sample=Fals
 print(f"Baseline: {baseline_output}")
 
 # Check what model predicts just before "it"
-prompt_before_crap = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to"
+prompt_before_it = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to"
 with torch.no_grad():
-    logits, _ = model.feature_intervention(prompt_before_crap, [])
+    logits, _ = model.feature_intervention(prompt_before_it, [])
     last_logits = logits[0, -1, :].float()
     probs = torch.softmax(last_logits, dim=-1)
     top5_probs, top5_ids = probs.topk(5)
@@ -493,7 +493,7 @@ with torch.no_grad():
     
     it_id = 625
     rank = (probs > probs[it_id]).sum().item()
-    print(f"\n  ' crap' rank: {rank}, prob: {probs[it_id].item():.6f}")
+    print(f"\n  ' it' rank: {rank}, prob: {probs[it_id].item():.6f}")
 
 with torch.no_grad():
     logits, _ = model.feature_intervention(prompt, [])

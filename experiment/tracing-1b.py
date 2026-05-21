@@ -470,11 +470,28 @@ print("DOWNSTREAM EFFECTS MEASUREMENT (suppress at peak step)")
 print("=" * 70)
  
 prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\n"
+measurement_prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe saw a carrot and had to grab"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
 print("\nGenerating baseline output without intervention...")
 baseline_output = model.feature_intervention_generate(prompt, [], do_sample=False)[0]
 print(f"Baseline: {baseline_output}")
+
+# Check what model predicts just before "it"
+prompt_before_it = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to"
+with torch.no_grad():
+    logits, _ = model.feature_intervention(prompt_before_it, [])
+    last_logits = logits[0, -1, :].float()
+    probs = torch.softmax(last_logits, dim=-1)
+    top5_probs, top5_ids = probs.topk(5)
+    print("Predicting after 'had to':")
+    for i in range(5):
+        token = tokenizer.convert_ids_to_tokens(top5_ids[i].item())
+        print(f"  {token!r}: {top5_probs[i].item():.4f}")
+    
+    it_id = 625
+    rank = (probs > probs[it_id]).sum().item()
+    print(f"\n  ' it' rank: {rank}, prob: {probs[it_id].item():.6f}")
 
 with torch.no_grad():
     logits, _ = model.feature_intervention(prompt, [])
@@ -489,7 +506,7 @@ with torch.no_grad():
         token = tokenizer.convert_ids_to_tokens(idx)
         print(f"  {token!r}: {prob:.4f}")
     
-    it_id = 625
+    it_id = 54122
     rank = (probs > probs[it_id]).sum().item()
     print(f'\n  " it" rank: {rank}, prob: {probs[it_id].item():.6f}')
 
@@ -502,7 +519,8 @@ downstream_results = measure_downstream_effects_batch(
     tokenizer=tokenizer,
     RHYME_TOKEN=RHYME_TOKEN,
     max_new_tokens=20,
-    max_candidates=50
+    max_candidates=50,
+    measurement_prompt=measurement_prompt
 )
  
 analyzed_results = analyze_downstream_effects(downstream_results, top_n=20)
@@ -541,7 +559,8 @@ downstream_results_first = measure_downstream_effects_batch(
     tokenizer=tokenizer,
     RHYME_TOKEN=RHYME_TOKEN,
     max_new_tokens=20,
-    max_candidates=30
+    max_candidates=30,
+    measurement_prompt=measurement_prompt
 )
  
 analyzed_results_first = analyze_downstream_effects(downstream_results_first, top_n=15)
@@ -549,7 +568,8 @@ analyzed_results_first = analyze_downstream_effects(downstream_results_first, to
 print("\n" + "=" * 100)
 print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)")
 print("=" * 100)
- 
+
+measurement_prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to" 
 sorted_by_prob_drop_first = sorted(downstream_results_first, key=lambda x: -x['prob_drop'])
  
 for i, result in enumerate(sorted_by_prob_drop_first[:8], 1):
@@ -787,3 +807,13 @@ for result in downstream_results:
         feat = result['feat']
         suppression_step = result['suppression_step']
         breaking_features.append((layer, feat, suppression_step, f"near-zero prob: {result['suppressed_prob']:.2e}"))
+
+output_data["breaking_features"] = [
+    {
+        "layer": layer,
+        "feat": feat,
+        "suppression_step": step,
+        "reason": reason
+    }
+    for layer, feat, step, reason in breaking_features
+]
