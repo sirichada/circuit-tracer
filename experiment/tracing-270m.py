@@ -736,16 +736,34 @@ print("=" * 70)
 print("PSEUDO-CLERP FOR INTERVENTION-BREAKING FEATURES")
 print("=" * 70)
 
-breaking_features = [
-    (16, 7915, 0, "breaks at step 0"),
-    (17, 9686, 0, "breaks at step 0"),
-    (17, 11499, 7, "breaks at step 7"),
-]
+# Identify intervention-breaking features from downstream results
+breaking_features = []
 
-for layer, feat, break_step, description in breaking_features:
+# Features that cause errors/exceptions during intervention
+for result in downstream_results:
+    layer = result['layer']
+    feat = result['feat']
+    suppression_step = result['suppression_step']
+    
+    # Check if intervention caused an error or unusual behavior
     try:
-        tokens = pseudo_clerp_topk(model, layer, feat, tokenizer, top_k=10)
-        print(f"\nL{layer:2d} F{feat:5d}  {description}")
-        print(f"    Top tokens: {tokens}")
+        intervention = [(layer, suppression_step, feat, 0.0)]
+        _ = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)
     except Exception as e:
-        print(f"\nL{layer:2d} F{feat:5d}  ERROR: {e}")
+        breaking_features.append((layer, feat, suppression_step, f"error: {str(e)[:40]}"))
+
+# Features with unexpectedly small/large rank shifts (anomalies)
+for result in downstream_results:
+    if abs(result['rank_shift']) > 500:  # Unusually large shift
+        layer = result['layer']
+        feat = result['feat']
+        suppression_step = result['suppression_step']
+        breaking_features.append((layer, feat, suppression_step, f"extreme rank shift: {result['rank_shift']}"))
+
+# Features where suppression causes model to fail gracefully (zero probability)
+for result in downstream_results:
+    if result['suppressed_prob'] < 1e-6:  # Near-zero probability
+        layer = result['layer']
+        feat = result['feat']
+        suppression_step = result['suppression_step']
+        breaking_features.append((layer, feat, suppression_step, f"near-zero prob: {result['suppressed_prob']:.2e}"))
