@@ -478,10 +478,22 @@ print("\nGenerating baseline output without intervention...")
 baseline_output = model.feature_intervention_generate(prompt, [], do_sample=False)[0]
 print(f"Baseline: {baseline_output}")
 
-test_intervention = [(17, 0, 10510, 0.0)]
-test_inputs = model.tokenizer("test", return_tensors="pt").to(device)
-result = model._get_feature_intervention_hooks(test_inputs["input_ids"], test_intervention)
-print(type(result), len(result), [type(x) for x in result])
+with torch.no_grad():
+    logits, _ = model.feature_intervention(prompt, [])
+    print(f"logits shape: {logits.shape}")  # confirm full shape
+    last_logits = logits[-1, -1, :]  # last batch, last seq position
+    probs = torch.softmax(last_logits.float(), dim=-1)
+    top5_probs, top5_ids = probs.topk(5)
+    
+    for i in range(5):
+        prob = top5_probs[i].item()
+        idx = top5_ids[i].item()
+        token = tokenizer.convert_ids_to_tokens(idx)
+        print(f"  {token!r}: {prob:.4f}")
+    
+    it_id = 625
+    rank = (probs > probs[it_id]).sum().item()
+    print(f'\n  " it" rank: {rank}, prob: {probs[it_id].item():.6f}')
 
 downstream_results = measure_downstream_effects_batch(
     model=model,
