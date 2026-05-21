@@ -4,10 +4,12 @@ from collections import defaultdict
 import json  # Fixed: Added missing import
 
 def measure_downstream_effects_single_feature(
-    model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens=20
+    model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, measurement_prompt=None 
 ):
+    measurement_prompt = measurement_prompt or prompt
+    inputs = model.tokenizer(measurement_prompt, return_tensors="pt").to(device)
+
     rhyme_token_id = tokenizer.encode(RHYME_TOKEN, add_special_tokens=False)[0]
-    inputs = model.tokenizer(prompt, return_tensors="pt").to(device)
     input_ids = inputs["input_ids"]  # shape [1, seq_len] — keep as 2D
 
     tl_model = model  # ReplacementModel IS the HookedTransformer
@@ -85,7 +87,7 @@ def measure_downstream_effects_single_feature(
     }
 
 
-def measure_downstream_effects_batch(model, prompt, candidates_list, suppression_step_key, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, max_candidates=None):
+def measure_downstream_effects_batch(model, prompt, candidates_list, suppression_step_key, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, max_candidates=None, measurement_prompt=None):
     """
     Measure downstream effects for multiple candidates.
     """
@@ -105,7 +107,7 @@ def measure_downstream_effects_batch(model, prompt, candidates_list, suppression
         
         try:
             effect = measure_downstream_effects_single_feature(
-                model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens
+                model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens, measurement_prompt=measurement_prompt
             )
             results.append(effect)
             
