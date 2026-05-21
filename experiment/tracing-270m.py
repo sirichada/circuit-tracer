@@ -61,7 +61,7 @@ from collections import defaultdict, Counter
 from pathlib import Path
 
 GRAPH_DIR = "/teamspace/studios/this_studio/circuit-tracer/experiment/graphs/gemma-3-270m"
-RHYME_TOKEN = "it"
+RHYME_TOKEN = " it"
 RHYME_STEP = 19
 PLANNING_WINDOW_START = 0
 PLANNING_WINDOW_END = 18
@@ -467,8 +467,8 @@ prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\n"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
 print("\nGenerating baseline output without intervention...")
-baseline_output = model.generate(prompt, max_new_tokens=20, do_sample=False)[0]
-print(f"Baseline: {baseline_output}\n")
+baseline_output = model.feature_intervention_generate(prompt, [], do_sample=False)[0]
+print(f"Baseline: {baseline_output}")
 
 test_intervention = [(17, 0, 10510, 0.0)]
 test_inputs = model.tokenizer("test", return_tensors="pt").to(device)
