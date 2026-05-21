@@ -58,12 +58,11 @@ import requests
 from collections import defaultdict, Counter
 from pathlib import Path
 
-# GRAPH_DIR = "./graphs/gemma-3-4b"
 GRAPH_DIR = "./circuit-tracer/experiment/graphs/gemma-3-1b"
-RHYME_TOKEN = "it"
+RHYME_TOKEN = " it"
 RHYME_STEP = 9
 PLANNING_WINDOW_START = 0
-PLANNING_WINDOW_END = 10
+PLANNING_WINDOW_END = 8
 INFLUENCE_THRESHOLD = 0.001
 MODEL_ID = "gemma-scope-2-1b-pt"
 FEAT_WIDTH = "16k"
@@ -97,9 +96,10 @@ def parse_node_ids(node):
     return None, None
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 1 — Extract ALL features above threshold (not top-N)
-# ══════════════════════════════════════════════════════════════════════════════
+# Reads all step-*.json attribution graph files from GRAPH_DIR.
+# For each step/token, filters to transcoder nodes with |influence| >= INFLUENCE_THRESHOLD
+# and collects (layer, feat, influence) tuples.
+# Stores per-step rows in step_features_raw and total abs-influence per step in step_total_influence.
 
 step_features_raw = {}  # step_idx -> list of all features above threshold
 step_total_influence = {}  # step_idx -> sum of absolute influence values
@@ -166,9 +166,9 @@ for s in sorted(step_features_raw.keys()):
     print(f"  step {s:02d} '{tok}': {n_feats} features (total_influence={total_inf:.4f})")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 2 — Normalize influence within each step and build feature timeline
-# ══════════════════════════════════════════════════════════════════════════════
+# Divides each feature's raw influence by its step's total to produce a normalized share.
+# Also computes a within-step percentile rank (top feature = 100th percentile).
+# Results are stored in feature_timeline[(layer, feat)][step] and feature_percentiles.
 
 feature_timeline = defaultdict(lambda: defaultdict(float))  # (layer, feat) -> {step: norm_inf}
 feature_percentiles = defaultdict(lambda: defaultdict(float))  # (layer, feat) -> {step: percentile}
@@ -195,9 +195,11 @@ for step_idx in sorted(step_features_raw.keys()):
 print(f"Built timeline for {len(feature_timeline)} unique features")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 3 — Extract feature statistics and classify into planning/execution
-# ══════════════════════════════════════════════════════════════════════════════
+# For each unique feature, computes summary stats: first active step, peak step,
+# peak normalized influence, influence at the rhyme step, and
+# sustain_ratio = rhyme_val / peak_val (how much of peak influence persists to rhyme time).
+# Features whose peak is before RHYME_STEP go into planning_features;
+# those peaking at or after go into execution_features.
 
 planning_features = []
 execution_features = []
@@ -266,9 +268,9 @@ for e in execution_features[:10]:
           f"rhyme={e['rhyme_val']:.4f}  sustain_ratio={e['sustain_ratio']:.4f}  percentile_at_rhyme={e['rhyme_percentile']:.1f}%")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 4 — Rhyme-circuit candidates with improved filtering
-# ══════════════════════════════════════════════════════════════════════════════
+# Filters planning_features down to the strongest rhyme-circuit candidates.
+# A feature qualifies only if it is also active at the rhyme step (>= 50th percentile there)
+# and has sustain_ratio >= 0.3 — meaning it activates early and stays influential at rhyme time.
 
 print()
 print("=" * 70)
@@ -298,9 +300,9 @@ for e in candidates[:15]:
 print(f"\nTotal rhyme-circuit candidates: {len(candidates)}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 5 — Per-step top features (normalized view)
-# ══════════════════════════════════════════════════════════════════════════════
+# Sanity-check / qualitative view: prints the top 5 features by normalized influence
+# for every step, along with each feature's within-step percentile rank.
+# The rhyme step is annotated with an arrow for easy identification.
 
 print()
 print("=" * 70)
@@ -323,9 +325,9 @@ for step_idx in sorted(all_step_indices):
         print(f"    L{r['layer']:2d} F{r['feat']:5d}  norm_inf={norm_inf:.4f}  percentile={percentile:.1f}%")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 6 — Early spike detection: features that break high percentile early
-# ══════════════════════════════════════════════════════════════════════════════
+# Finds features that first reach >= 70th percentile prominence very early in the sequence.
+# Results are sorted by early_spike_step so the features that become prominent soonest
+# appear first — regardless of whether they are rhyme-circuit candidates.
 
 print()
 print("=" * 70)
@@ -365,9 +367,11 @@ for e in early_spikes[:15]:
 print(f"\nTotal features with early spike: {len(early_spikes)}")
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 7 — Temporal clustering summary
-# ══════════════════════════════════════════════════════════════════════════════
+# Splits all features into three temporal bands based on where each feature's peak falls:
+#   EARLY  (steps 0 – RHYME_STEP//3)
+#   MID    (steps RHYME_STEP//3 – 2*RHYME_STEP//3)
+#   LATE   (steps 2*RHYME_STEP//3 – end)
+# For each band, reports feature count, most active layers, and the top 3 features by peak influence.
 
 print()
 print("=" * 70)
@@ -406,9 +410,9 @@ for band_name, feats in bands.items():
         peak_s = max(feature_timeline[lf], key=feature_timeline[lf].get)
         print(f"    L{lf[0]:2d} F{lf[1]:5d}  peak_norm_inf={peak_inf:.4f} @ step{peak_s}")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 10 — Dump feature statistics for downstream analysis
-# ══════════════════════════════════════════════════════════════════════════════
+# Packages config, aggregate statistics, the candidates list, and the early_spikes list
+# into output_data. This dict is extended with downstream intervention results
+# and written to circuit_tracing_results_1b.json in the next section.
 
 output_data = {
     "config": {
@@ -453,9 +457,12 @@ output_data = {
     ],
 }
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 8 — Interventions on candidates at their peak step
-# ══════════════════════════════════════════════════════════════════════════════
+# Causal intervention experiment: for each rhyme-circuit candidate, zeroes out the feature
+# at two different points — its peak step and its first active step — then measures how much
+# the model's probability of generating the rhyme token drops.
+# Prints full before/after generations for the top 10 features by probability drop,
+# compares the two suppression strategies side by side, and serializes all results
+# to circuit_tracing_results_1b.json.
 
 print()
 print("=" * 70)
@@ -466,13 +473,25 @@ prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\n"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
  
 print("\nGenerating baseline output without intervention...")
-baseline_output = model.generate(prompt, max_new_tokens=20, do_sample=False)[0]
-print(f"Baseline: {baseline_output}\n")
+baseline_output = model.feature_intervention_generate(prompt, [], do_sample=False)[0]
+print(f"Baseline: {baseline_output}")
 
-test_intervention = [(17, 0, 10510, 0.0)]
-test_inputs = model.tokenizer("test", return_tensors="pt").to(device)
-result = model._get_feature_intervention_hooks(test_inputs["input_ids"], test_intervention)
-print(type(result), len(result), [type(x) for x in result])
+with torch.no_grad():
+    logits, _ = model.feature_intervention(prompt, [])
+    print(f"logits shape: {logits.shape}")  # confirm full shape
+    last_logits = logits[-1, -1, :]  # last batch, last seq position
+    probs = torch.softmax(last_logits.float(), dim=-1)
+    top5_probs, top5_ids = probs.topk(5)
+    
+    for i in range(5):
+        prob = top5_probs[i].item()
+        idx = top5_ids[i].item()
+        token = tokenizer.convert_ids_to_tokens(idx)
+        print(f"  {token!r}: {prob:.4f}")
+    
+    it_id = 625
+    rank = (probs > probs[it_id]).sum().item()
+    print(f'\n  " it" rank: {rank}, prob: {probs[it_id].item():.6f}')
 
 downstream_results = measure_downstream_effects_batch(
     model=model,
@@ -676,9 +695,11 @@ except Exception as e:
         json.dump({"status": "failed_downstream_formatting", "config": output_data.get("config")}, f)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CELL 9 — Pseudo-CLERP: project feature decoder direction through unembedding
-# ══════════════════════════════════════════════════════════════════════════════
+# Pseudo-CLERP: for each top candidate and early-spike feature, multiplies the transcoder's
+# decoder weight vector W_dec[feat] by the unembedding matrix W_U to get logits over
+# the vocabulary — a quick proxy for "what tokens does this feature predict?"
+# Also runs the probe on any features that caused anomalous behavior during intervention
+# (errors, extreme rank shifts, or near-zero suppressed probability).
 
 def pseudo_clerp_topk(model, layer, local_feat, tokenizer, top_k=10):
     """
@@ -735,16 +756,34 @@ print("=" * 70)
 print("PSEUDO-CLERP FOR INTERVENTION-BREAKING FEATURES")
 print("=" * 70)
 
-breaking_features = [
-    (16, 7915, 0, "breaks at step 0"),
-    (17, 9686, 0, "breaks at step 0"),
-    (17, 11499, 7, "breaks at step 7"),
-]
+# Identify intervention-breaking features from downstream results
+breaking_features = []
 
-for layer, feat, break_step, description in breaking_features:
+# Features that cause errors/exceptions during intervention
+for result in downstream_results:
+    layer = result['layer']
+    feat = result['feat']
+    suppression_step = result['suppression_step']
+    
+    # Check if intervention caused an error or unusual behavior
     try:
-        tokens = pseudo_clerp_topk(model, layer, feat, tokenizer, top_k=10)
-        print(f"\nL{layer:2d} F{feat:5d}  {description}")
-        print(f"    Top tokens: {tokens}")
+        intervention = [(layer, suppression_step, feat, 0.0)]
+        _ = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)
     except Exception as e:
-        print(f"\nL{layer:2d} F{feat:5d}  ERROR: {e}")
+        breaking_features.append((layer, feat, suppression_step, f"error: {str(e)[:40]}"))
+
+# Features with unexpectedly small/large rank shifts (anomalies)
+for result in downstream_results:
+    if abs(result['rank_shift']) > 500:  # Unusually large shift
+        layer = result['layer']
+        feat = result['feat']
+        suppression_step = result['suppression_step']
+        breaking_features.append((layer, feat, suppression_step, f"extreme rank shift: {result['rank_shift']}"))
+
+# Features where suppression causes model to fail gracefully (zero probability)
+for result in downstream_results:
+    if result['suppressed_prob'] < 1e-6:  # Near-zero probability
+        layer = result['layer']
+        feat = result['feat']
+        suppression_step = result['suppression_step']
+        breaking_features.append((layer, feat, suppression_step, f"near-zero prob: {result['suppressed_prob']:.2e}"))
