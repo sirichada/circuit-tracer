@@ -60,9 +60,9 @@ from pathlib import Path
 
 GRAPH_DIR = "./circuit-tracer/experiment/graphs/gemma-3-1b"
 RHYME_TOKEN = " it"
-RHYME_STEP = 9
+RHYME_STEP = 19
 PLANNING_WINDOW_START = 0
-PLANNING_WINDOW_END = 8
+PLANNING_WINDOW_END = 18
 INFLUENCE_THRESHOLD = 0.001
 MODEL_ID = "gemma-scope-2-1b-pt"
 FEAT_WIDTH = "16k"
@@ -569,7 +569,7 @@ print("\n" + "=" * 100)
 print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)")
 print("=" * 100)
 
-measurement_prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to" 
+measurement_prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe saw a carrot and had to grab"
 sorted_by_prob_drop_first = sorted(downstream_results_first, key=lambda x: -x['prob_drop'])
  
 for i, result in enumerate(sorted_by_prob_drop_first[:8], 1):
