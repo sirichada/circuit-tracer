@@ -190,12 +190,10 @@ for model_name in model_order:
 
 print("Scaling analysis:")
 for i in range(len(model_order) - 1):
-    size_ratio = model_sizes[i+1] / model_sizes[i]
     cand_ratio = candidate_counts[i+1] / candidate_counts[i] if candidate_counts[i] > 0 else 0
     unique_ratio = unique_feature_counts[i+1] / unique_feature_counts[i] if unique_feature_counts[i] > 0 else 0
     
     print(f"\n{model_order[i]} → {model_order[i+1]}:")
-    print(f"  Model size ratio: {size_ratio:.2f}x")
     print(f"  Candidate count ratio: {cand_ratio:.2f}x")
     print(f"  Unique features ratio: {unique_ratio:.2f}x")
 
@@ -221,6 +219,36 @@ if shared_all:
         print(f"  L{layer:2d} F{feat:5d}  ranks: 270m={rank_270m}, 1b={rank_1b}, 4b={rank_4b}")
 else:
     print("No features shared across all three models.")
+
+
+print("=" * 80)
+print("INSIGHT 8: SUPPRESSION EFFECTS ACROSS MODEL SCALES")
+print("=" * 80)
+
+for model_name in model_order:
+    downstream = models[model_name].get('downstream_effects', {})
+    peak_results = downstream.get('peak_step_suppression', {}).get('top_by_prob_drop', [])
+    
+    if not peak_results:
+        print(f"{model_name}: no downstream results found")
+        continue
+    
+    prob_drops = [r['prob_drop'] for r in peak_results]
+    prob_drop_pcts = [r['prob_drop_pct'] for r in peak_results]
+    
+    max_drop = max(prob_drops) if prob_drops else 0
+    max_drop_pct = max(prob_drop_pcts) if prob_drop_pcts else 0
+    avg_drop = sum(prob_drops) / len(prob_drops) if prob_drops else 0
+    nonzero = sum(1 for d in prob_drops if d > 0)
+    
+    print(f"\n{model_name}:")
+    print(f"  Max prob_drop (single feature): {max_drop:.4f} ({max_drop_pct:.1f}%)")
+    print(f"  Avg prob_drop (top 30): {avg_drop:.4f}")
+    print(f"  Features with positive drop: {nonzero} / {len(prob_drops)}")
+    
+    if peak_results:
+        top = peak_results[0]
+        print(f"  Top feature: L{top['layer']} F{top['feat']}  drop={top['prob_drop']:.4f} ({top['prob_drop_pct']:.1f}%)")
 
 print()
 print("=" * 80)
