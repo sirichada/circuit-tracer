@@ -508,9 +508,6 @@ with torch.no_grad():
         token = tokenizer.convert_ids_to_tokens(idx)
         print(f"  {token!r}: {prob:.4f}")
     
-    it_id = 54122
-    rank = (probs > probs[it_id]).sum().item()
-    print(f'\n  " it" rank: {rank}, prob: {probs[it_id].item():.6f}')
 
 downstream_results = measure_downstream_effects_batch(
     model=model,
@@ -571,7 +568,6 @@ print("\n" + "=" * 100)
 print("POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)")
 print("=" * 100)
 
-measurement_prompt = "A rhyming couplet:\nHe saw a carrot and had to grab it,\nHe ate it and then he had to" 
 sorted_by_prob_drop_first = sorted(downstream_results_first, key=lambda x: -x['prob_drop'])
  
 for i, result in enumerate(sorted_by_prob_drop_first[:8], 1):
@@ -629,38 +625,6 @@ if shared_features:
         print(f"    First step: prob_drop={comp['first_prob_drop']:.4f}  rank_shift={comp['first_rank_shift']:+4d}")
         print(f"    Difference: prob_drop_delta={abs(comp['peak_prob_drop'] - comp['first_prob_drop']):.4f}")
  
- 
-output_data_with_downstream = output_data.copy()
-output_data_with_downstream["downstream_effects"] = {
-    "peak_step_suppression": {
-        "results_count": len(downstream_results),
-        "aggregate": analyzed_results["aggregate"],
-        "top_by_prob_drop": [
-            {
-                "layer": r["layer"],
-                "feat": r["feat"],
-                "prob_drop": float(r["prob_drop"]),
-                "prob_drop_pct": float(r["prob_drop_pct"]),
-                "rank_shift": int(r["rank_shift"]),
-            }
-            for r in analyzed_results['sorted_by_prob_drop'][:30]
-        ]
-    },
-    "first_step_suppression": {
-        "results_count": len(downstream_results_first),
-        "aggregate": analyzed_results_first["aggregate"],
-        "top_by_prob_drop": [
-            {
-                "layer": r["layer"],
-                "feat": r["feat"],
-                "prob_drop": float(r["prob_drop"]),
-                "prob_drop_pct": float(r["prob_drop_pct"]),
-                "rank_shift": int(r["rank_shift"]),
-            }
-            for r in analyzed_results_first['sorted_by_prob_drop'][:30]
-        ]
-    }
-}
  
 # Force ensure everything is a standard Python primitive before dumping
 def sanitize_for_json(obj):
@@ -778,44 +742,3 @@ print("=" * 70)
 print("PSEUDO-CLERP FOR INTERVENTION-BREAKING FEATURES")
 print("=" * 70)
 
-# Identify intervention-breaking features from downstream results
-breaking_features = []
-
-# Features that cause errors/exceptions during intervention
-for result in downstream_results:
-    layer = result['layer']
-    feat = result['feat']
-    suppression_step = result['suppression_step']
-    
-    # Check if intervention caused an error or unusual behavior
-    try:
-        intervention = [(layer, suppression_step, feat, 0.0)]
-        _ = model.feature_intervention_generate(prompt, intervention, max_new_tokens=20)
-    except Exception as e:
-        breaking_features.append((layer, feat, suppression_step, f"error: {str(e)[:40]}"))
-
-# Features with unexpectedly small/large rank shifts (anomalies)
-for result in downstream_results:
-    if abs(result['rank_shift']) > 500:  # Unusually large shift
-        layer = result['layer']
-        feat = result['feat']
-        suppression_step = result['suppression_step']
-        breaking_features.append((layer, feat, suppression_step, f"extreme rank shift: {result['rank_shift']}"))
-
-# Features where suppression causes model to fail gracefully (zero probability)
-for result in downstream_results:
-    if result['suppressed_prob'] < 1e-6:  # Near-zero probability
-        layer = result['layer']
-        feat = result['feat']
-        suppression_step = result['suppression_step']
-        breaking_features.append((layer, feat, suppression_step, f"near-zero prob: {result['suppressed_prob']:.2e}"))
-
-output_data["breaking_features"] = [
-    {
-        "layer": layer,
-        "feat": feat,
-        "suppression_step": step,
-        "reason": reason
-    }
-    for layer, feat, step, reason in breaking_features
-]
