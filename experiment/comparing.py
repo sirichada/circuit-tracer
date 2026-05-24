@@ -160,7 +160,6 @@ print("=" * 80)
 print("INSIGHT 7: RHYME-CIRCUIT CANDIDATE GROWTH AND EARLY SPIKE PREVALENCE")
 print("=" * 80)
 
-model_sizes = [270, 1024, 4096]
 candidate_counts = []
 early_spike_counts = []
 early_spike_prevalence = []
