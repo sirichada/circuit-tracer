@@ -735,3 +735,10 @@ for i, early_spike in enumerate(early_spikes[:15], 1):
         print(f"    Top tokens: {tokens}")
     except Exception as e:
         print(f"\n{i:2d}. L{layer:2d} F{feat:5d}  ERROR: {e}")
+
+
+print()
+print("=" * 70)
+print("PSEUDO-CLERP FOR INTERVENTION-BREAKING FEATURES")
+print("=" * 70)
+
