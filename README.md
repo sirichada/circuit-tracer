@@ -1,4 +1,4 @@
-# circuit tracer for poetry replication
+# Investigating Forward Planning Behaviors in Smaller LLMs through Transcoder Circuit Tracing 
 
 ## Overview
 
