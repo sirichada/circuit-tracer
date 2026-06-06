@@ -1,0 +1,224 @@
+================================================================================
+INSIGHT 1: FEATURE PERSISTENCE ACROSS MODEL SCALES
+================================================================================
+Features in all three models: 0
+Features in 270m only: 255
+Features in 1b only: 224
+Features in 4b only: 61
+Features in 270m & 1b (not 4b): 0
+Features in 270m & 4b (not 1b): 0
+Features in 1b & 4b (not 270m): 0
+
+================================================================================
+INSIGHT 2: PEAK STEP TIMING DISTRIBUTIONS
+================================================================================
+
+270m:
+  Total candidates: 255
+  Peak step distribution:
+    Step  0:   16 (  6.3%)
+    Step  1:   12 (  4.7%)
+    Step  2:   23 (  9.0%)
+    Step  3:    3 (  1.2%)
+    Step  4:   13 (  5.1%)
+    Step  5:   12 (  4.7%)
+    Step  6:   14 (  5.5%)
+    Step  7:   10 (  3.9%)
+    Step  8:  121 ( 47.5%)
+    Step  9:   13 (  5.1%)
+    Step 11:    6 (  2.4%)
+    Step 12:    3 (  1.2%)
+    Step 13:    2 (  0.8%)
+    Step 14:    1 (  0.4%)
+    Step 15:    2 (  0.8%)
+    Step 16:    3 (  1.2%)
+    Step 18:    1 (  0.4%)
+
+1b:
+  Total candidates: 224
+  Peak step distribution:
+    Step  0:   16 (  7.1%)
+    Step  1:    4 (  1.8%)
+    Step  2:   12 (  5.4%)
+    Step  3:    3 (  1.3%)
+    Step  4:   35 ( 15.6%)
+    Step  5:    5 (  2.2%)
+    Step  6:   18 (  8.0%)
+    Step  7:    1 (  0.4%)
+    Step  8:  109 ( 48.7%)
+    Step  9:    9 (  4.0%)
+    Step 11:    1 (  0.4%)
+    Step 12:    2 (  0.9%)
+    Step 13:    3 (  1.3%)
+    Step 14:    1 (  0.4%)
+    Step 15:    2 (  0.9%)
+    Step 17:    3 (  1.3%)
+
+4b:
+  Total candidates: 61
+  Peak step distribution:
+    Step  0:   10 ( 16.4%)
+    Step  1:    8 ( 13.1%)
+    Step  2:   11 ( 18.0%)
+    Step  3:   11 ( 18.0%)
+    Step  4:    3 (  4.9%)
+    Step  5:    3 (  4.9%)
+    Step  6:    8 ( 13.1%)
+    Step  7:    7 ( 11.5%)
+
+================================================================================
+INSIGHT 3: SUSTAIN RATIO STATISTICS (PLANNING FEATURES)
+================================================================================
+270m:
+  Average sustain ratio: 0.8717
+  Min sustain ratio: 0.7290
+  Max sustain ratio: 0.9999
+
+1b:
+  Average sustain ratio: 0.8699
+  Min sustain ratio: 0.7315
+  Max sustain ratio: 0.9970
+
+4b:
+  Average sustain ratio: 0.8498
+  Min sustain ratio: 0.7035
+  Max sustain ratio: 0.9892
+
+================================================================================
+INSIGHT 4: PERCENTILE RANKING CONSISTENCY
+================================================================================
+
+Top 10 candidates in 270m:
+   1. L16 F 6482  peak_val=0.002577  rhyme_percentile=71.6%
+   2. L16 F11543  peak_val=0.002566  rhyme_percentile=88.9%
+   3. L16 F 7915  peak_val=0.002549  rhyme_percentile=86.2%
+   4. L17 F 1196  peak_val=0.002535  rhyme_percentile=70.9%
+   5. L17 F 9686  peak_val=0.002511  rhyme_percentile=90.1%
+   6. L17 F 5981  peak_val=0.002447  rhyme_percentile=92.2%
+   7. L16 F15761  peak_val=0.002437  rhyme_percentile=94.7%
+   8. L17 F 5054  peak_val=0.002436  rhyme_percentile=87.4%
+   9. L17 F 2047  peak_val=0.002427  rhyme_percentile=53.6%
+  10. L17 F12457  peak_val=0.002422  rhyme_percentile=85.7%
+
+Top 10 candidates in 1b:
+   1. L23 F12697  peak_val=0.002556  rhyme_percentile=90.1%
+   2. L16 F 9937  peak_val=0.002551  rhyme_percentile=70.0%
+   3. L23 F 2282  peak_val=0.002549  rhyme_percentile=88.0%
+   4. L25 F  862  peak_val=0.002548  rhyme_percentile=99.8%
+   5. L25 F  362  peak_val=0.002546  rhyme_percentile=57.2%
+   6. L24 F 1915  peak_val=0.002543  rhyme_percentile=76.1%
+   7. L24 F 2742  peak_val=0.002525  rhyme_percentile=64.7%
+   8. L23 F 9580  peak_val=0.002519  rhyme_percentile=56.7%
+   9. L22 F 1960  peak_val=0.002504  rhyme_percentile=77.6%
+  10. L21 F  862  peak_val=0.002497  rhyme_percentile=84.6%
+
+Top 10 candidates in 4b:
+   1. L33 F 2040  peak_val=0.002426  rhyme_percentile=56.6%
+   2. L28 F 7653  peak_val=0.002424  rhyme_percentile=64.6%
+   3. L29 F14434  peak_val=0.002410  rhyme_percentile=51.4%
+   4. L21 F 8370  peak_val=0.002396  rhyme_percentile=61.5%
+   5. L28 F  773  peak_val=0.002391  rhyme_percentile=50.1%
+   6. L32 F  601  peak_val=0.002389  rhyme_percentile=83.0%
+   7. L32 F15491  peak_val=0.002388  rhyme_percentile=91.8%
+   8. L29 F 8138  peak_val=0.002387  rhyme_percentile=96.9%
+   9. L28 F 3018  peak_val=0.002378  rhyme_percentile=73.5%
+  10. L28 F  461  peak_val=0.002373  rhyme_percentile=56.3%
+
+================================================================================
+INSIGHT 5: SCALING LAWS - PLANNING VS EXECUTION FEATURES
+================================================================================
+270m:
+  Planning features:   2913 ( 98.2%)
+  Execution features:     52 (  1.8%)
+
+1b:
+  Planning features:   2953 ( 97.9%)
+  Execution features:     63 (  2.1%)
+
+4b:
+  Planning features:   1691 ( 70.3%)
+  Execution features:    714 ( 29.7%)
+
+
+================================================================================
+INSIGHT 6: TEMPORAL CLUSTERING DISTRIBUTION
+================================================================================
+270m (rhyme_step=19):
+  Early (0-6):        93 ( 36.5%)
+  Mid (7-12):        153 ( 60.0%)
+  Late (13-19):        9 (  3.5%)
+
+1b (rhyme_step=19):
+  Early (0-6):        93 ( 41.5%)
+  Mid (7-12):        122 ( 54.5%)
+  Late (13-19):        9 (  4.0%)
+
+4b (rhyme_step=8):
+  Early (0-2):        29 ( 47.5%)
+  Mid (3-5):         17 ( 27.9%)
+  Late (6-8):       15 ( 24.6%)
+
+
+================================================================================
+INSIGHT 7: RHYME-CIRCUIT CANDIDATE GROWTH AND EARLY SPIKE PREVALENCE
+================================================================================
+270m:
+  Unique features above threshold:  2965
+  Rhyme-circuit candidates:   255
+  Early spike features:  1710 (57.7% of unique)
+
+1b:
+  Unique features above threshold:  3016
+  Rhyme-circuit candidates:   224
+  Early spike features:  1830 (60.7% of unique)
+
+4b:
+  Unique features above threshold:  2405
+  Rhyme-circuit candidates:    61
+  Early spike features:  1295 (53.8% of unique)
+
+Scaling analysis:
+
+270m → 1b:
+  Candidate count ratio: 0.88x
+  Unique features ratio: 1.02x
+
+1b → 4b:
+  Candidate count ratio: 0.27x
+  Unique features ratio: 0.80x
+
+================================================================================
+ADDITIONAL: FEATURE INDEX MAPPING (SHARED FEATURES)
+================================================================================
+No features shared across all three models.
+================================================================================
+INSIGHT 8: SUPPRESSION EFFECTS ACROSS MODEL SCALES
+================================================================================
+
+270m:
+  Max prob_drop (single feature): 0.0039 (0.4%)
+  Avg prob_drop (top 30): 0.0012
+  Features with positive drop: 9 / 30
+  Top feature: L16 F12430  drop=0.0039 (0.4%)
+
+1b:
+  Max prob_drop (single feature): 0.0000 (0.0%)
+  Avg prob_drop (top 30): 0.0000
+  Features with positive drop: 0 / 30
+  Top feature: L25 F862  drop=0.0000 (0.0%)
+
+4b:
+  Max prob_drop (single feature): 0.0352 (5.7%)
+  Avg prob_drop (top 30): 0.0051
+  Features with positive drop: 12 / 30
+  Top feature: L29 F9296  drop=0.0352 (5.7%)
+
+================================================================================
+SUMMARY TABLE
+================================================================================
+
+Model      Unique     Candidates   Early Spikes    Planning %   Execution % 
+----------------------------------------------------------------------
+270m       2965       255          1710            98.2         1.8         
+1b         3016       224          1830            97.9         2.1         
+4b         2405       61           1295            70.3         29.7        

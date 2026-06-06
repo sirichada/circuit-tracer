@@ -1,0 +1,696 @@
+Loaded pretrained model google/gemma-3-4b-pt into HookedTransformer
+Searching for: ./circuit-tracer/experiment/graphs/gemma-3-4b/step-*.json
+Found 11 files
+Loaded 11 steps: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  step 00 'He': 546 features (total_influence=351.5011)
+  step 01 'ate': 547 features (total_influence=360.2419)
+  step 02 'it': 490 features (total_influence=329.8252)
+  step 03 'and': 495 features (total_influence=329.6180)
+  step 04 'then': 536 features (total_influence=355.3190)
+  step 05 'he': 530 features (total_influence=350.2127)
+  step 06 'had': 552 features (total_influence=358.0519)
+  step 07 'to': 534 features (total_influence=349.7038)
+  step 08 'crap': 611 features (total_influence=389.4371)
+  step 09 'it': 571 features (total_influence=372.2322)
+  step 10 '.': 553 features (total_influence=359.2444)
+Built timeline for 2405 unique features
+======================================================================
+PLANNING FEATURES (peak before step 8): 1691
+======================================================================
+  L28 F11034  first_active=step2  peak=0.0024 @ step3  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L31 F 9684  first_active=step0  peak=0.0024 @ step3  rhyme=0.0014  sustain_ratio=0.5783  percentile_at_rhyme=22.7%
+  L33 F11962  first_active=step0  peak=0.0024 @ step2  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L33 F 2040  first_active=step0  peak=0.0024 @ step3  rhyme=0.0017  sustain_ratio=0.7186  percentile_at_rhyme=56.6%
+  L27 F  237  first_active=step0  peak=0.0024 @ step2  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L25 F15669  first_active=step3  peak=0.0024 @ step3  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L22 F12305  first_active=step2  peak=0.0024 @ step2  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L28 F 7653  first_active=step0  peak=0.0024 @ step3  rhyme=0.0018  sustain_ratio=0.7440  percentile_at_rhyme=64.6%
+  L28 F13458  first_active=step0  peak=0.0024 @ step3  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L32 F 3967  first_active=step2  peak=0.0024 @ step2  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+
+======================================================================
+EXECUTION FEATURES (peak at step 8 or after): 714
+======================================================================
+  L32 F13927  first_active=step7  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L25 F13890  first_active=step7  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L33 F 7253  first_active=step10  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L33 F 2154  first_active=step9  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L26 F 2089  first_active=step1  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L26 F13917  first_active=step10  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L33 F 7249  first_active=step7  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L26 F  292  first_active=step10  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L33 F11590  first_active=step10  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+  L23 F 5234  first_active=step10  peak=0.0022 @ step10  rhyme=0.0000  sustain_ratio=0.0000  percentile_at_rhyme=0.0%
+
+======================================================================
+RHYME-CIRCUIT CANDIDATES (improved filtering)
+======================================================================
+  L29 F 8138  first_active=step2 (6 steps before rhyme)  peak=0.0024 @ step3  rhyme=0.0020  sustain=0.853  rhyme_percentile=96.9%
+  L32 F15491  first_active=step1 (7 steps before rhyme)  peak=0.0024 @ step3  rhyme=0.0020  sustain=0.838  rhyme_percentile=91.8%
+  L32 F  601  first_active=step2 (6 steps before rhyme)  peak=0.0024 @ step2  rhyme=0.0019  sustain=0.811  rhyme_percentile=83.0%
+  L30 F 5542  first_active=step0 (8 steps before rhyme)  peak=0.0023 @ step3  rhyme=0.0020  sustain=0.881  rhyme_percentile=94.8%
+  L33 F 3796  first_active=step1 (7 steps before rhyme)  peak=0.0023 @ step3  rhyme=0.0020  sustain=0.876  rhyme_percentile=93.1%
+  L27 F 5568  first_active=step0 (8 steps before rhyme)  peak=0.0022 @ step5  rhyme=0.0020  sustain=0.919  rhyme_percentile=98.7%
+  L33 F 9557  first_active=step4 (4 steps before rhyme)  peak=0.0022 @ step5  rhyme=0.0020  sustain=0.910  rhyme_percentile=95.6%
+  L32 F10478  first_active=step2 (6 steps before rhyme)  peak=0.0023 @ step2  rhyme=0.0019  sustain=0.813  rhyme_percentile=79.1%
+  L30 F13855  first_active=step0 (8 steps before rhyme)  peak=0.0022 @ step0  rhyme=0.0020  sustain=0.924  rhyme_percentile=97.9%
+  L29 F  148  first_active=step1 (7 steps before rhyme)  peak=0.0022 @ step7  rhyme=0.0020  sustain=0.931  rhyme_percentile=99.0%
+  L28 F 3018  first_active=step0 (8 steps before rhyme)  peak=0.0024 @ step2  rhyme=0.0019  sustain=0.784  rhyme_percentile=73.5%
+  L28 F14156  first_active=step7 (1 steps before rhyme)  peak=0.0022 @ step7  rhyme=0.0020  sustain=0.929  rhyme_percentile=97.7%
+  L29 F 7407  first_active=step0 (8 steps before rhyme)  peak=0.0022 @ step0  rhyme=0.0020  sustain=0.900  rhyme_percentile=92.3%
+  L28 F 7653  first_active=step0 (8 steps before rhyme)  peak=0.0024 @ step3  rhyme=0.0018  sustain=0.744  rhyme_percentile=64.6%
+  L29 F  604  first_active=step0 (8 steps before rhyme)  peak=0.0022 @ step2  rhyme=0.0020  sustain=0.907  rhyme_percentile=91.7%
+
+Total rhyme-circuit candidates: 61
+
+======================================================================
+PER-STEP TOP FEATURES (normalized influence + percentile rank)
+======================================================================
+
+step 00 'He'
+    L33 F 8127  norm_inf=0.0023  percentile=100.0%
+    L28 F14864  norm_inf=0.0023  percentile=99.8%
+    L33 F16270  norm_inf=0.0023  percentile=99.6%
+    L32 F 1665  norm_inf=0.0023  percentile=99.5%
+    L28 F11643  norm_inf=0.0023  percentile=99.3%
+
+step 01 'ate'
+    L33 F  752  norm_inf=0.0022  percentile=100.0%
+    L29 F  538  norm_inf=0.0022  percentile=99.8%
+    L25 F14941  norm_inf=0.0022  percentile=99.6%
+    L33 F 1755  norm_inf=0.0022  percentile=99.5%
+    L33 F 3796  norm_inf=0.0022  percentile=99.3%
+
+step 02 'it'
+    L33 F11962  norm_inf=0.0024  percentile=100.0%
+    L27 F  237  norm_inf=0.0024  percentile=99.8%
+    L22 F12305  norm_inf=0.0024  percentile=99.6%
+    L32 F 3967  norm_inf=0.0024  percentile=99.4%
+    L33 F  935  norm_inf=0.0024  percentile=99.2%
+
+step 03 'and'
+    L28 F11034  norm_inf=0.0024  percentile=100.0%
+    L31 F 9684  norm_inf=0.0024  percentile=99.8%
+    L33 F 2040  norm_inf=0.0024  percentile=99.6%
+    L25 F15669  norm_inf=0.0024  percentile=99.4%
+    L28 F 7653  norm_inf=0.0024  percentile=99.2%
+
+step 04 'then'
+    L32 F 5064  norm_inf=0.0023  percentile=100.0%
+    L32 F  904  norm_inf=0.0023  percentile=99.8%
+    L30 F  108  norm_inf=0.0023  percentile=99.6%
+    L33 F13343  norm_inf=0.0022  percentile=99.4%
+    L28 F10776  norm_inf=0.0022  percentile=99.3%
+
+step 05 'he'
+    L29 F 7666  norm_inf=0.0023  percentile=100.0%
+    L28 F 3059  norm_inf=0.0023  percentile=99.8%
+    L32 F   72  norm_inf=0.0023  percentile=99.6%
+    L32 F 2769  norm_inf=0.0023  percentile=99.4%
+    L31 F 1595  norm_inf=0.0023  percentile=99.2%
+
+step 06 'had'
+    L32 F 1471  norm_inf=0.0022  percentile=100.0%
+    L28 F 1864  norm_inf=0.0022  percentile=99.8%
+    L26 F 1193  norm_inf=0.0022  percentile=99.6%
+    L28 F 5724  norm_inf=0.0022  percentile=99.5%
+    L28 F 3557  norm_inf=0.0022  percentile=99.3%
+
+step 07 'to'
+    L28 F 4248  norm_inf=0.0023  percentile=100.0%
+    L28 F 5154  norm_inf=0.0023  percentile=99.8%
+    L25 F 1300  norm_inf=0.0023  percentile=99.6%
+    L25 F 1609  norm_inf=0.0023  percentile=99.4%
+    L33 F 1208  norm_inf=0.0023  percentile=99.3%
+
+step 08 'crap'  ← RHYME
+    L28 F 2140  norm_inf=0.0021  percentile=100.0%
+    L31 F 5233  norm_inf=0.0021  percentile=99.8%
+    L31 F  960  norm_inf=0.0021  percentile=99.7%
+    L32 F 3809  norm_inf=0.0021  percentile=99.5%
+    L29 F  237  norm_inf=0.0021  percentile=99.3%
+
+step 09 'it'
+    L28 F 5063  norm_inf=0.0021  percentile=100.0%
+    L28 F10878  norm_inf=0.0021  percentile=99.8%
+    L32 F16184  norm_inf=0.0021  percentile=99.6%
+    L28 F 2357  norm_inf=0.0021  percentile=99.5%
+    L22 F 6838  norm_inf=0.0021  percentile=99.3%
+
+step 10 '.'
+    L32 F13927  norm_inf=0.0022  percentile=100.0%
+    L25 F13890  norm_inf=0.0022  percentile=99.8%
+    L28 F15676  norm_inf=0.0022  percentile=99.6%
+    L33 F 7253  norm_inf=0.0022  percentile=99.5%
+    L33 F 2154  norm_inf=0.0022  percentile=99.3%
+
+======================================================================
+EARLY SPIKE DETECTION (first step at ≥70th percentile)
+======================================================================
+  L33 F 8127  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L28 F14864  early_spike @ step0  peak=0.0023 @ step3  rhyme=0.0000  sustain=0.000
+  L33 F16270  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L32 F 1665  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L28 F11643  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L32 F  456  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L28 F10453  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L32 F 1217  early_spike @ step0  peak=0.0023 @ step2  rhyme=0.0000  sustain=0.000
+  L32 F 4232  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L29 F 2844  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L29 F 1842  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0013  sustain=0.591
+  L31 F 1734  early_spike @ step0  peak=0.0023 @ step2  rhyme=0.0000  sustain=0.000
+  L29 F12188  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+  L31 F 8237  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0012  sustain=0.538
+  L33 F 9041  early_spike @ step0  peak=0.0023 @ step0  rhyme=0.0000  sustain=0.000
+
+Total features with early spike: 1295
+
+======================================================================
+TEMPORAL CLUSTERING SUMMARY
+======================================================================
+
+EARLY (planning): 772 features
+  Top layers: L28×169  L32×112  L30×85  L29×84  L33×80
+    L33 F11962  peak_norm_inf=0.0024 @ step2
+    L27 F  237  peak_norm_inf=0.0024 @ step2
+    L22 F12305  peak_norm_inf=0.0024 @ step2
+
+MID (buildup): 548 features
+  Top layers: L28×133  L32×68  L30×55  L29×53  L26×43
+    L28 F11034  peak_norm_inf=0.0024 @ step3
+    L31 F 9684  peak_norm_inf=0.0024 @ step3
+    L33 F 2040  peak_norm_inf=0.0024 @ step3
+
+LATE (execution): 1085 features
+  Top layers: L32×203  L33×186  L28×176  L29×131  L30×110
+    L28 F 4248  peak_norm_inf=0.0023 @ step7
+    L28 F 5154  peak_norm_inf=0.0023 @ step7
+    L25 F 1300  peak_norm_inf=0.0023 @ step7
+
+======================================================================
+DOWNSTREAM EFFECTS MEASUREMENT (suppress at peak step)
+======================================================================
+
+Generating baseline output without intervention...
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 10/10 [00:02<00:00,  4.91it/s]
+Baseline: A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+Predicting after 'had to':
+  '▁crap': 0.6149
+  '▁fart': 0.0445
+  '▁shit': 0.0445
+  '▁grab': 0.0347
+  '▁bar': 0.0186
+
+  ' crap' rank: 0, prob: 0.614892
+logits shape: torch.Size([1, 19, 262208])
+  'He': 0.1592
+  'And': 0.0752
+  'But': 0.0664
+  'So': 0.0456
+  'Then': 0.0403
+
+  " crap" rank: 107570, prob: 0.000000
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.27it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.32it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.27it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.33it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.28it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.43it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.27it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.30it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.10it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.24it/s]
+  Processed 10 / 50 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.13it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.11it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.22it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.24it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.32it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.34it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.39it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.40it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.15it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.34it/s]
+  Processed 20 / 50 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.32it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.35it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.25it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.24it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.42it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.42it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.40it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.37it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.45it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.38it/s]
+  Processed 30 / 50 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.39it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.34it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.35it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.38it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.32it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.41it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.40it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.39it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.35it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+  Processed 40 / 50 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.36it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.40it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.45it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.37it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.34it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.30it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.29it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.33it/s]
+  Processed 50 / 50 candidates
+
+====================================================================================================
+POST-INTERVENTION OUTPUTS FOR TOP FEATURES BY PROBABILITY DROP
+====================================================================================================
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.20it/s]
+
+1. L29 F 9296 (suppress @ step  7)
+   P(rhyme): 0.6133 → 0.5781  (drop: 5.7%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+Because he saw so few in his garden;
+Work was like a hovel wall of iron,
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.28it/s]
+
+2. L27 F 5568 (suppress @ step  5)
+   P(rhyme): 0.6133 → 0.5977  (drop: 2.5%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+Then grubbed, grubbed, grabbled.
+How's a "grub-
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.29it/s]
+
+3. L28 F 7653 (suppress @ step  3)
+   P(rhyme): 0.6133 → 0.5977  (drop: 2.5%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+It was red, white, and quite a rasta.
+
+In all my days
+And so
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.39it/s]
+
+4. L29 F  604 (suppress @ step  2)
+   P(rhyme): 0.6133 → 0.5977  (drop: 2.5%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+For he’d seen that rabbit rabbits love to nab it.
+
+A triolet in a trio
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.38it/s]
+
+5. L28 F 5724 (suppress @ step  6)
+   P(rhyme): 0.6133 → 0.5977  (drop: 2.5%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+so he was banished to the land of the FAT!
+He is one of the ogres,
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+
+6. L29 F 8138 (suppress @ step  3)
+   P(rhyme): 0.6133 → 0.6016  (drop: 1.9%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+He grabbed at it so fast, he put his back out.
+
+Oversimplification:
+
+
+
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.30it/s]
+
+7. L30 F 2355 (suppress @ step  1)
+   P(rhyme): 0.6133 → 0.6016  (drop: 1.9%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+Who dis? Whoate that whoate that.
+He picked up everything off the table.
+
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.25it/s]
+
+8. L28 F14156 (suppress @ step  7)
+   P(rhyme): 0.6133 → 0.6055  (drop: 1.3%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+He wore a wig because it was spotless!
+A sentence that uses the same consonant sounds at the
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.33it/s]
+
+9. L21 F 8370 (suppress @ step  2)
+   P(rhyme): 0.6133 → 0.6055  (drop: 1.3%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+and after a bite said now this is nice;
+I like this carrot. A carrot is a
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.29it/s]
+
+10. L29 F14434 (suppress @ step  3)
+   P(rhyme): 0.6133 → 0.6055  (drop: 1.3%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+But before it bit him he heard 'whoa!'
+
+He wanted to go on his merry way
+
+====================================================================================================
+MEASURING DOWNSTREAM EFFECTS - SUPPRESSION AT FIRST STEP
+====================================================================================================
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.53it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.56it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.39it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.50it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.46it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.52it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.45it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.38it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.44it/s]
+  Processed 10 / 30 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.05it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.15it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.04it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.08it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.31it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  5.82it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.16it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.43it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.43it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.45it/s]
+  Processed 20 / 30 candidates
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.48it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.58it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.66it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.38it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.46it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.49it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.50it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.51it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.42it/s]
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.28it/s]
+  Processed 30 / 30 candidates
+
+====================================================================================================
+POST-INTERVENTION OUTPUTS FOR TOP FEATURES (FIRST STEP SUPPRESSION)
+====================================================================================================
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.42it/s]
+
+1. L29 F 8138 (suppress @ step  2)
+   P(rhyme): 0.6133 → 0.6055  (drop: 1.3%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+but only carrot-el numbers could get it. With two carrot-els left, 
+Now
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.49it/s]
+
+2. L28 F14156 (suppress @ step  7)
+   P(rhyme): 0.6133 → 0.6055  (drop: 1.3%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate a carrot really great it.
+Summary: The poem is about a child who picks a
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.41it/s]
+
+3. L29 F  148 (suppress @ step  1)
+   P(rhyme): 0.6133 → 0.6094  (drop: 0.6%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+then saw his lost dog. He said an offering is not enough.
+The man saw the carrot
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.50it/s]
+
+4. L32 F15491 (suppress @ step  1)
+   P(rhyme): 0.6133 → 0.6133  (drop: 0.0%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+The others looked the same, so did he babble on,
+“You ain’t my
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.47it/s]
+
+5. L32 F  601 (suppress @ step  2)
+   P(rhyme): 0.6133 → 0.6133  (drop: 0.0%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+But along came the cabbage and he nabbed that.
+He took a bite of each, so
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.48it/s]
+
+6. L30 F 5542 (suppress @ step  0)
+   P(rhyme): 0.6133 → 0.6133  (drop: 0.0%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+But the carrot slipped and the bunny was grabbed!
+
+A haiku:
+Carrot comes in
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.56it/s]
+
+7. L33 F 3796 (suppress @ step  1)
+   P(rhyme): 0.6133 → 0.6133  (drop: 0.0%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+Had a carrot, he got a pedigree.
+
+Another rhyming couplet:
+"One
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 20/20 [00:03<00:00,  6.55it/s]
+
+8. L27 F 5568 (suppress @ step  0)
+   P(rhyme): 0.6133 → 0.6133  (drop: 0.0%)
+   Rank:   0 →   0  (shift:   +0)
+   Baseline:         A rhyming couplet:
+He saw a carrot and had to grab it,
+He ate it and then he had to crap it
+   Post-intervention: A rhyming couplet:
+He saw a carrot and had to grab it,
+He woke his sibling to come and grab it too,
+But then he saw one more carrot there
+
+====================================================================================================
+COMPARING SUPPRESSION STRATEGIES
+====================================================================================================
+Features tested with peak_step suppression: 50
+Features tested with first_step suppression: 30
+Features tested with both strategies: 30
+
+Comparison of suppression strategies (shared features):
+ 1. L26 F  294
+    Peak step:  prob_drop=0.0039  rank_shift=  +0
+    First step: prob_drop=-0.0430  rank_shift=  +0
+    Difference: prob_drop_delta=0.0469
+ 2. L29 F 9296
+    Peak step:  prob_drop=0.0352  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0352
+ 3. L27 F 5568
+    Peak step:  prob_drop=0.0156  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0156
+ 4. L28 F  773
+    Peak step:  prob_drop=-0.0156  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0156
+ 5. L28 F 7653
+    Peak step:  prob_drop=0.0156  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0156
+ 6. L29 F  604
+    Peak step:  prob_drop=0.0156  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0156
+ 7. L32 F 7194
+    Peak step:  prob_drop=-0.0117  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0117
+ 8. L21 F 8370
+    Peak step:  prob_drop=0.0078  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0078
+ 9. L29 F14434
+    Peak step:  prob_drop=0.0078  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0078
+10. L29 F 8138
+    Peak step:  prob_drop=0.0117  rank_shift=  +0
+    First step: prob_drop=0.0078  rank_shift=  +0
+    Difference: prob_drop_delta=0.0039
+11. L30 F 1069
+    Peak step:  prob_drop=-0.0039  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0039
+12. L26 F 3186
+    Peak step:  prob_drop=0.0000  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0000
+13. L28 F  461
+    Peak step:  prob_drop=0.0000  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0000
+14. L28 F 3018
+    Peak step:  prob_drop=0.0000  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0000
+15. L28 F 3557
+    Peak step:  prob_drop=0.0000  rank_shift=  +0
+    First step: prob_drop=0.0000  rank_shift=  +0
+    Difference: prob_drop_delta=0.0000
+
+Combined results successfully saved to tracing/circuit_tracing_results_4b.json
+
+======================================================================
+PSEUDO-CLERP FOR TOP 10 RHYME-CIRCUIT CANDIDATES
+======================================================================
+
+ 1. L29 F 8138  first_active=step2  sustain=0.853
+    Top tokens: [' সা±ষাৎ', 'setWalk', ' SeekBar', 'बीर', 'कोल', '플레이', ' تفسیر', '쉬', ' вещи', ' वCषा']
+
+ 2. L32 F15491  first_active=step1  sustain=0.838
+    Top tokens: ['they', ' they', '<unused1207>', '<unused2190>', 'gaver', '<unused1083>', 'was', '。...', ' THEY', '.</']
+
+ 3. L32 F  601  first_active=step2  sustain=0.811
+    Top tokens: [' Sh', ' ſt', ' Ha', D', ' Sp', ' Қ', ' Je', ' sc', 'E', ' ў']
+
+ 4. L30 F 5542  first_active=step0  sustain=0.881
+    Top tokens: [F+', ' заб', ' Chant', 'ceans', ' Til', ' i', 'silk', ' drab', 'nbsp', 'Til']
+
+ 5. L33 F 3796  first_active=step1  sustain=0.876
+    Top tokens: [' Tail', ' Lo', ' LO', ' SY', ' SHEET', ' LEN', ' LS', ' Sheet', ' Sic', 'Lo']
+
+ 6. L27 F 5568  first_active=step0  sustain=0.919
+    Top tokens: [' october', ' america', ' european', ' japanese', ' december', ' france', ' american', ' russian', ' japan', ' hollywood']
+
+ 7. L33 F 9557  first_active=step4  sustain=0.910
+    Top tokens: [' Support', ' Motivation', ' Benefits', 'Support', ' Purpose', ' Results', ' Significance', ' Sentiment', ' Relationship', ' Cause']
+
+ 8. L32 F10478  first_active=step2  sustain=0.813
+    Top tokens: [' to', ' into', ' Into', ' To', ',»', '»,', 'Ս', ' то', '.[[', ' gra']
+
+ 9. L30 F13855  first_active=step0  sustain=0.924
+    Top tokens: [' language', 'language', 'Lang', ' Language', 'Language', 'lang', ' lang', ' Lang', '语言', ' LANGUAGE']
+
+10. L29 F  148  first_active=step1  sustain=0.931
+    Top tokens: ['ategori', ' अदर', '<unused470>', 'lasse', 'atam', '平均', ' AVERAGE', '醞', 'örper', πযাGপ']
+======================================================================
+PSEUDO-CLERP FOR TOP 15 EARLY-SPIKE FEATURES
+======================================================================
+
+ 1. L33 F 8127  early_spike_step=0  sustain=0.000
+    Top tokens: ['ographers', 'ophiles', 'caria', ' мастера', ' CCI', 'icator', 'agogues', 'ologies', 'ophilia', 'omans']
+
+ 2. L28 F14864  early_spike_step=0  sustain=0.000
+    Top tokens: [' However', 'However', ' jedoch', ' HOWEVER', ' however', ' però', ' azonban', ' Porém', ' Однако', ' însă']
+
+ 3. L33 F16270  early_spike_step=0  sustain=0.000
+    Top tokens: [' Sj', ' Sa', ' Sada', ' Sama', ' Sik', ' Sic', ' Dus', ' Sad', ' Sut', ' Si']
+
+ 4. L32 F 1665  early_spike_step=0  sustain=0.000
+    Top tokens: [' angered', ' he', 'nian', 'ಯೇ', ' он', 'H', 'ăn', ' ප', 'торы', 'nancy']
+
+ 5. L28 F11643  early_spike_step=0  sustain=0.000
+    Top tokens: [' २०२२', ' Lub', ' resp', ' spontaneous', 'bw', 'BW', ' לו', ' lm', 'лите', ' Ravens']
+
+ 6. L32 F  456  early_spike_step=0  sustain=0.000
+    Top tokens: ['ꗜ', '𒉶', '𒅤', ' PLDNN', 'ꗐ', 'MalayMarks', 'odikwa', 'DenovoMis', '𒂷', '<unused338>']
+
+ 7. L28 F10453  early_spike_step=0  sustain=0.000
+    Top tokens: [' islamic', ' european', ' European', ' mammalian', ' prehistoric', ' muslim', ' benthic', ' chinese', ' freshwater', ' eukaryotic']
+
+ 8. L32 F 1217  early_spike_step=0  sustain=0.000
+    Top tokens: [' ligula', ' beg', ' होत', ' reign', ' minerals', ' programming', ' parasit', ' discriminating', ' classifications', 'Specifications']
+
+ 9. L32 F 4232  early_spike_step=0  sustain=0.000
+    Top tokens: ['ot', 'ote', 'ians', 'ota', 'än', 'oL', 'ors', 'يان', 'IAN', 'en']
+
+10. L29 F 2844  early_spike_step=0  sustain=0.000
+    Top tokens: ['pin', ' Byte', ' Pin', 'TC', 'astom', ' পাহ', ' PIN', 'пля', 'Pin', 'ปล']
+
+11. L29 F 1842  early_spike_step=0  sustain=0.591
+    Top tokens: [' 압', 'ストレス', ' Lokal', ' Kräfte', '圧力', 'pressure', ' pressure', '覚', ' Cub', ' exhib']
+
+12. L31 F 1734  early_spike_step=0  sustain=0.000
+    Top tokens: ['to', 'and', 'combat', 'checkbox', 'yield', 'conflict', 'bonus', 'requires', 'autocomplete', 'allows']
+
+13. L29 F12188  early_spike_step=0  sustain=0.000
+    Top tokens: [' spie', 'cci', ' ┘Iन', 'experiments', 'gres', '┘ती', 'ariah', 'pom', ' experiments', 'pym']
+
+14. L31 F 8237  early_spike_step=0  sustain=0.538
+    Top tokens: [' her', ' spam', 'ors', ' she', 'ories', ' "', ' emancip', ' more', ' Jesus', ' inland']
+
+15. L33 F 9041  early_spike_step=0  sustain=0.000
+    Top tokens: ['two', 'told', 'didn', 'totally', 'recently', 'soldiers', 'soul', 'situation', 'surface', 'selling']
