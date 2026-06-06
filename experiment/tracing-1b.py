@@ -667,15 +667,15 @@ try:
         }
     }
     
-    with open("circuit_tracing_results_1b.json", "w") as f:
+    with open("circuit-tracer/experiment/tracing/circuit_tracing_results_1b.json", "w") as f:
         json.dump(output_data_with_downstream, f, indent=2)
      
-    print("\nCombined results successfully saved to circuit_tracing_results_1b.json")
+    print("\nCombined results successfully saved to tracing/circuit_tracing_results_1b.json")
 
 except Exception as e:
     print(f"\nERROR: Failed to write JSON file: {e}")
     # Fallback: save what we have so we don't lose the whole script's progress
-    with open("circuit_tracing_results_1b_fallback.json", "w") as f:
+    with open("circuit-tracer/experiment/tracing/circuit_tracing_results_1b_fallback.json", "w") as f:
         json.dump({"status": "failed_downstream_formatting", "config": output_data.get("config")}, f)
 
 
@@ -719,10 +719,11 @@ for i, candidate in enumerate(candidates[:10], 1):
         print(f"\n{i:2d}. L{layer:2d} F{feat:5d}  ERROR: {e}")
 
 
-print()
-print("=" * 70)
-print("PSEUDO-CLERP FOR TOP 15 EARLY-SPIKE FEATURES")
-print("=" * 70)
+import sys
+
+print("=" * 70, flush=True)
+print("PSEUDO-CLERP FOR TOP 15 EARLY-SPIKE FEATURES", flush=True)
+print("=" * 70, flush=True)
 
 for i, early_spike in enumerate(early_spikes[:15], 1):
     layer, feat = early_spike["feat_key"]
@@ -730,13 +731,11 @@ for i, early_spike in enumerate(early_spikes[:15], 1):
         tokens = pseudo_clerp_topk(model, layer, feat, tokenizer, top_k=10)
         print(f"\n{i:2d}. L{layer:2d} F{feat:5d}  early_spike_step={early_spike['early_spike_step']}  "
               f"sustain={early_spike['sustain_ratio']:.3f}")
-        print(f"    Top tokens: {tokens}")
+        print(f"    Top tokens: {tokens}", flush=True)
     except Exception as e:
-        print(f"\n{i:2d}. L{layer:2d} F{feat:5d}  ERROR: {e}")
+        print(f"\n{i:2d}. L{layer:2d} F{feat:5d}  ERROR: {e}", flush=True)
 
-
-print()
-print("=" * 70)
-print("PSEUDO-CLERP FOR INTERVENTION-BREAKING FEATURES")
-print("=" * 70)
-
+# Explicit cleanup to prevent __del__ racing with stdout at shutdown
+del model
+torch.cuda.empty_cache()
+sys.stdout.flush()
