@@ -6,6 +6,8 @@ This project investigates whether transformer language models engage in **advanc
 
 The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — using [Gemma-Scope-2](https://huggingface.co/google/gemma-scope-2) transcoders to replace MLP layers with interpretable sparse features. Attribution graphs are built for every generated token, feature timelines are extracted and analyzed, and causal interventions (feature suppression) are used to verify which features are causally necessary for the rhyme.
 
+Code documentation was generated with Claude (Anthropic).
+
 ---
 
 ## Pipeline Overview
