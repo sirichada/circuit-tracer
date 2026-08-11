@@ -43,7 +43,7 @@ def load_prompt_set() -> list[dict]:
 
 def generate_and_attribute(model, tokenizer, prompt_text: str, slug: str) -> None:
     input_ids = tokenizer(prompt_text, return_tensors="pt")["input_ids"]
-    STOP_IDS = {108, 235265, tokenizer.eos_token_id}
+    STOP_IDS = {107, 108, tokenizer.eos_token_id}
     token_trace = []
 
     for step in range(MAX_STEPS):
@@ -146,7 +146,9 @@ def main() -> None:
             print(f"[{slug}] FAILED — skipping, see traceback below")
             import traceback
             traceback.print_exc()
-            continue
+        finally:
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
