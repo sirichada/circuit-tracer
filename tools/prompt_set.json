@@ -1,0 +1,37 @@
+[
+  {
+    "slug": "original",
+    "prompt_text": "A rhyming couplet:\nHe saw a carrot and had to grab it,\n",
+    "rhyme_word": "rabbit",
+    "family_size": null,
+    "role": "original"
+  },
+  {
+    "slug": "hard",
+    "prompt_text": "A rhyming couplet:\nHe studied every word inside the article,\n",
+    "rhyme_word": "article",
+    "family_size": 1,
+    "role": "hard"
+  },
+  {
+    "slug": "medium",
+    "prompt_text": "A rhyming couplet:\nShe dreamed of being a famous creator,\n",
+    "rhyme_word": "creator",
+    "family_size": 2,
+    "role": "medium"
+  },
+  {
+    "slug": "easy",
+    "prompt_text": "A rhyming couplet:\nHe rushed to breakfast, running late,\n",
+    "rhyme_word": "late",
+    "family_size": 24,
+    "role": "easy"
+  },
+  {
+    "slug": "repetition_control",
+    "prompt_text": "A rhyming couplet:\nThere's really nothing more to say,\n",
+    "rhyme_word": "say",
+    "family_size": 44,
+    "role": "repetition_control"
+  }
+]
