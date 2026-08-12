@@ -140,6 +140,12 @@ def main() -> None:
     for record in prompt_set:
         slug = record["slug"]
         prompt_text = record["prompt_text"]
+
+        slug_dir = Path(OUTPUT_DIR) / slug
+        if slug_dir.exists() and any(slug_dir.iterdir()):
+            print(f"[{slug}] already has output — skipping")
+            continue
+        
         try:
             generate_and_attribute(model, tokenizer, prompt_text, slug)
         except Exception:
