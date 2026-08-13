@@ -44,6 +44,7 @@ decided by hand and hardcoded into `tools/prompt_set.json`.
 
 import argparse
 import json
+import math
 import random
 from collections import Counter
 from datetime import datetime, timezone
@@ -69,13 +70,11 @@ TOKENIZER_REPORT_PATH = Path(__file__).parent.parent / "experiment" / "tokenizer
 # requires `transformers` and a HF auth token with access.
 TOKENIZER_MODELS = ["google/gemma-3-270m", "google/gemma-3-1b-pt", "google/gemma-3-4b-pt"]
 
-# Named candidates from the multi-prompt-revision gap-fill handoff, keyed by
-# the gap they were proposed to fill.
-NAMED_CANDIDATES = {
-    "second_1_rhyme": ["strength", "length", "reasons", "seasons"],
-    "polysyllabic_26_120": ["transfer", "reversed", "allow"],
-}
-GAP_6_8_SIZES = {6, 7, 8}
+# Evenly-spaced grid in log10(rhymes_all), 1 to 115: step = log10(115)/9 ~=
+# 0.229 log10 units (~1.69x per step). Fixed in advance rather than found by
+# iterative gap-patching, which has no natural stopping point - see
+# action_plan.md's "Prompt set redesign ... n=10, evenly log-spaced" section.
+GRID_TARGETS = [1, 2, 3, 5, 8, 14, 24, 40, 68, 115]
 
 # One word per rhyme family in a candidate list, so a list spans distinct
 # rhyme sounds rather than one family wearing many spellings.
@@ -446,41 +445,6 @@ def candidate_rows(band: set[str]) -> list[tuple[list[tuple[str, int]], str, flo
     return sorted(rows, key=lambda r: r[0][0][1])
 
 
-GAP_6_8_SHORTLIST_SIZE = 15
-
-
-def gap_6_8_candidates(band: set[str] | None = None) -> list[dict]:
-    """Shortlist for the family_size 6-8 gap - between 5 ("treasure") and 9
-    ("brother") in the current prompt set, which `main()`'s spread sample
-    (4, 8, 16, ...) skips over.
-
-    Excludes affixal-only families (see `is_affixal`) since those need a
-    human call anyway, then keeps the `GAP_6_8_SHORTLIST_SIZE` families whose
-    best rhyme partner has the highest wordfreq zipf score, as a naturalness
-    proxy - a rare rhyme partner makes for an awkward couplet line even when
-    the head word itself is common. `candidate_rows` already yields one row
-    per family, so this is "several usable options" per the gap-fill brief,
-    not every 6-8 family in the band (there are hundreds)."""
-    band = band if band is not None else frequency_band()
-    rows = candidate_rows(band)
-    options = []
-    for members, best, best_zipf, affixal in rows:
-        word, size = members[0]
-        if size in GAP_6_8_SIZES and not affixal:
-            options.append(
-                {
-                    "word": word,
-                    "rhymes_all": size,
-                    "best_rhyme_partner": best,
-                    "best_rhyme_partner_zipf": round(best_zipf, 2),
-                    "affixal_only_rhyme": affixal,
-                    "syllables": syllable_count(word),
-                }
-            )
-    options.sort(key=lambda o: o["best_rhyme_partner_zipf"], reverse=True)
-    return options[:GAP_6_8_SHORTLIST_SIZE]
-
-
 def is_content_word(word: str) -> bool:
     tag = nltk.pos_tag([word])[0][1]
     return tag in CONTENT_TAGS
@@ -502,6 +466,38 @@ def repetition_control_candidates(sizes: dict[str, int]) -> list[tuple[str, int,
         if len(out) >= SHORTLIST_SIZE:
             break
     return out
+
+
+def grid_coverage(entries: list[dict], targets: list[int] = GRID_TARGETS) -> list[dict]:
+    """For each `GRID_TARGETS` value, the word in `entries` (read from
+    `prompt_set.json`, not hardcoded) whose `rhymes_all` is closest in
+    log10 space.
+
+    Exists so the target-to-word mapping is derived from the current file,
+    not hand-copied into a table that can silently go stale or contain a
+    transcription error - a manual version of this table briefly conflated
+    `reversed` (rhymes_all=36) with `become` (71) for the same target.
+
+    Entries with `rhymes_all: null` (e.g. the "original" replication-anchor
+    entry, a cross-word near-rhyme the metric can't score) are excluded from
+    the search - they're exempt from the grid, not a candidate for it.
+    """
+    scoreable = [e for e in entries if e.get("rhymes_all") is not None]
+    results = []
+    for target in targets:
+        best = min(
+            scoreable, key=lambda e: abs(math.log10(e["rhymes_all"]) - math.log10(target))
+        )
+        gap = abs(math.log10(best["rhymes_all"]) - math.log10(target))
+        results.append(
+            {
+                "target": target,
+                "word": best["rhyme_word"],
+                "rhymes_all": best["rhymes_all"],
+                "log10_gap": round(gap, 3),
+            }
+        )
+    return results
 
 
 def print_distribution_summary(label: str, sizes: dict[str, int]) -> None:
@@ -655,9 +651,8 @@ def run_tokenizer_check() -> None:
     with open(PROMPT_SET_PATH, encoding="utf-8") as f:
         existing_entries = json.load(f)
 
-    print("Checking tokenizer(s), computing gap-6-8 candidates...")
-    gap_options = gap_6_8_candidates()
-    report = build_tokenizer_report(existing_entries, NAMED_CANDIDATES, gap_options)
+    print("Checking tokenizer(s) against prompt_set.json...")
+    report = build_tokenizer_report(existing_entries, {}, [])
 
     print_tokenizer_table(report)
 
@@ -729,6 +724,15 @@ def main() -> None:
     ]
     print(f"Sanity check - 'tear' rhymes (primary pronunciation only): {tear_rhymes[:10]}")
     print(f"Sanity check - 'again' rhymes (primary pronunciation only): {again_rhymes[:10]}")
+
+    print(f"\nGrid coverage ({GRID_TARGETS} targets vs current prompt_set.json):")
+    with open(PROMPT_SET_PATH, encoding="utf-8") as f:
+        prompt_set_entries = json.load(f)
+    for row in grid_coverage(prompt_set_entries):
+        print(
+            f"    target {row['target']:>4} -> {row['word']:<12} "
+            f"(rhymes_all={row['rhymes_all']}, log10 gap {row['log10_gap']})"
+        )
 
 
 if __name__ == "__main__":

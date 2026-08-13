@@ -21,13 +21,6 @@
     "difficulty": "hard"
   },
   {
-    "slug": "priority",
-    "prompt_text": "A rhyming couplet:\nThe roof was now his one priority,\n",
-    "rhyme_word": "priority",
-    "rhymes_all": 4,
-    "difficulty": "hard"
-  },
-  {
     "slug": "treasure",
     "prompt_text": "A rhyming couplet:\nThe pirates buried all of their treasure,\n",
     "rhyme_word": "treasure",
@@ -35,18 +28,11 @@
     "difficulty": "hard"
   },
   {
-    "slug": "brother",
-    "prompt_text": "A rhyming couplet:\nHe shared a bedroom with his brother,\n",
-    "rhyme_word": "brother",
-    "rhymes_all": 9,
+    "slug": "realm",
+    "prompt_text": "A rhyming couplet:\nThe dragon guarded every inch of the realm,\n",
+    "rhyme_word": "realm",
+    "rhymes_all": 8,
     "difficulty": "hard"
-  },
-  {
-    "slug": "wood",
-    "prompt_text": "A rhyming couplet:\nHe gathered up a heavy load of wood,\n",
-    "rhyme_word": "wood",
-    "rhymes_all": 12,
-    "difficulty": "medium"
   },
   {
     "slug": "thunder",
@@ -56,45 +42,24 @@
     "difficulty": "medium"
   },
   {
-    "slug": "breaking",
-    "prompt_text": "A rhyming couplet:\nThe waves against the rocks kept breaking,\n",
-    "rhyme_word": "breaking",
-    "rhymes_all": 16,
+    "slug": "beneath",
+    "prompt_text": "A rhyming couplet:\nThe roots ran deep in the soil beneath,\n",
+    "rhyme_word": "beneath",
+    "rhymes_all": 24,
     "difficulty": "medium"
   },
   {
-    "slug": "crown",
-    "prompt_text": "A rhyming couplet:\nThe king had gone and lost his golden crown,\n",
-    "rhyme_word": "crown",
-    "rhymes_all": 23,
+    "slug": "inspire",
+    "prompt_text": "A rhyming couplet:\nHer words were all it took to inspire,\n",
+    "rhyme_word": "inspire",
+    "rhymes_all": 40,
     "difficulty": "medium"
   },
   {
-    "slug": "adjust",
-    "prompt_text": "A rhyming couplet:\nThe saddle slipped and he had to adjust,\n",
-    "rhyme_word": "adjust",
-    "rhymes_all": 38,
-    "difficulty": "medium"
-  },
-  {
-    "slug": "shut",
-    "prompt_text": "A rhyming couplet:\nHe heard a noise and pulled the curtain shut,\n",
-    "rhyme_word": "shut",
-    "rhymes_all": 38,
-    "difficulty": "medium"
-  },
-  {
-    "slug": "become",
-    "prompt_text": "A rhyming couplet:\nShe wondered what her son would soon become,\n",
-    "rhyme_word": "become",
-    "rhymes_all": 71,
-    "difficulty": "medium"
-  },
-  {
-    "slug": "shot",
-    "prompt_text": "A rhyming couplet:\nThe hunter raised his rifle for the shot,\n",
-    "rhyme_word": "shot",
-    "rhymes_all": 82,
+    "slug": "mom",
+    "prompt_text": "A rhyming couplet:\nHe called to tell the news to his mom,\n",
+    "rhyme_word": "mom",
+    "rhymes_all": 68,
     "difficulty": "medium"
   },
   {
@@ -103,5 +68,12 @@
     "rhyme_word": "ten",
     "rhymes_all": 115,
     "difficulty": "easy"
+  },
+  {
+    "slug": "original",
+    "prompt_text": "A rhyming couplet:\nHe saw a carrot and had to grab it,\n",
+    "rhyme_word": "it",
+    "rhymes_all": null,
+    "difficulty": null
   }
 ]

@@ -21,6 +21,8 @@ The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — usin
 | rhyme family | Words sharing one rime. Prompts use one per family. | `candidate_rows()` |
 | affixal | Every available rhyme is a prefix or suffix of the word, so the couplet can be completed by affixation rather than phonological retrieval. Over-inclusive by design; flags for manual inspection, never filters. | `is_affixal()` |
 | difficulty | hard = 1–9 rhymes, medium = 10–99, easy = 100+. The integer part of `log10(rhymes_all)`; descriptive only, never used to select. | `difficulty_label()` |
+| grid | 10 prompts at `rhymes_all` targets evenly spaced in log10 from 1 to 115 (`1, 2, 3, 5, 8, 14, 24, 40, 68, 115`), each an exact `rhymes_all` match. | `GRID_TARGETS`, `grid_coverage()` |
+| `original` | An 11th prompt reproducing the paper's original "grab it"/"rabbit" example verbatim, `rhymes_all: null` since it's a cross-word near-rhyme the metric can't score. Kept as a replication anchor, exempt from the grid. | — |
 
 **Output judgement** (`tools/rhyme_labels.py`)
 
