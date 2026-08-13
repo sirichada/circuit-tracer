@@ -558,7 +558,6 @@ def build_tokenizer_report(
                 "source": "existing_prompt_set",
                 "slug": entry["slug"],
                 "rhymes_all": entry["rhymes_all"],
-                "difficulty": entry.get("difficulty"),
                 "syllables": syllable_count(word),
                 "leading_space_form": " " + word,
                 "tokens": tokens,
