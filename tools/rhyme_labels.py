@@ -14,9 +14,13 @@ Two reviewer objections motivate this (see `action_plan.md` Phase 3):
     cross-scale timing difference could come from the differing targets rather
     than from scale. Bucketing the prompts turns that from an unanswered flaw
     into a measured number.
-  - "Repetition, not rhyme": the smaller models appear to echo the prompt's
-    last word. The identical-word check makes that objective rather than
-    eyeballed.
+  - "Repetition, not rhyme": the smaller models appear to echo the prompt
+    rather than rhyme with it. Two measures make that objective rather than
+    eyeballed, and they are different failures: `line_echo`, the generated line
+    reproducing the prompt's line, and `rhyme_word_echo` (the `repetition`
+    label), a new sentence that still ends on the cue word. Both are computed
+    on every run, alongside `line_overlap` for partial reuse and
+    `inflected_repeat` for grab/grabbed. See ECHO_NOTE.
 
 No model load, no GPU - this reads graph JSON and CMUdict only.
 
@@ -85,6 +89,22 @@ ONSET_NOTE = (
     "pairs such as titled/entitled, whose onsets differ (T vs EH0 N T)."
 )
 
+ECHO_NOTE = (
+    "Echo is measured two ways, both on every run, both fixed before generation "
+    "so neither is tuned to results. line_echo: the generated line reproduces "
+    "the prompt's line, compared as word sequences after lowercasing and "
+    "stripping punctuation. rhyme_word_echo: the generated line ends on the "
+    "prompt's line-ending word (the 'repetition' label) - a new sentence that "
+    "still defaults to the cue word. The two are different failures and are "
+    "reported separately, as is line_overlap, the fraction of the prompt line's "
+    "distinct words reappearing in the generated line - a number rather than a "
+    "threshold, so partial reuse is visible without a cutoff to defend. "
+    "inflected_repeat is likewise separate: the rhyme word is not identical to "
+    "the target but has it as a prefix (grab/grabbed), which is neither clean "
+    "repetition nor independent retrieval. Echo is a line-ending property; a "
+    "prompt word reused mid-line is ordinary lexical reuse and is not counted."
+)
+
 CROSS_WORD_NOTE = (
     "'grab it'/'crap it' rhymes across the word boundary; the single-word rime "
     "rule compares 'grab' (AE1 B) against the generated rhyme word, so a "
@@ -129,6 +149,48 @@ def baseline_word(prompt_text: str) -> str:
     idx = last_content_word(words)
     assert idx is not None, f"no content word in prompt line: {lines[-1]!r}"
     return words[idx]
+
+
+def normalise_line(text: str) -> list[str]:
+    """A line as a list of comparable words: lowercased, punctuation stripped."""
+    return [w for w in (strip_punct(t).lower() for t in text.split()) if w]
+
+
+def first_line(text: str) -> list[str]:
+    """The first non-empty line of a generated continuation, normalised."""
+    for line in text.splitlines():
+        if line.strip():
+            return normalise_line(line)
+    return []
+
+
+def prompt_line(prompt_text: str) -> list[str]:
+    """The prompt's own line 1 - the line the model is asked to rhyme with."""
+    lines = [ln for ln in prompt_text.splitlines() if ln.strip()]
+    return normalise_line(lines[-1]) if lines else []
+
+
+def line_overlap(generated: list[str], prompt: list[str]) -> float:
+    """Fraction of the prompt line's distinct words reappearing in the
+    generated line. Reported as a number, not thresholded: partial reuse is
+    then visible without a cutoff that would have to be justified."""
+    if not prompt:
+        return 0.0
+    return round(len(set(generated) & set(prompt)) / len(set(prompt)), 3)
+
+
+def inflected_repeat(generated: str, target: str) -> bool:
+    """The rhyme word is not the target but has it as a prefix (grab/grabbed).
+
+    Neither clean repetition nor independent retrieval, so it is counted
+    separately rather than folded into either. Prefix only, not suffix: a
+    suffix rule would fire on unrelated pairs that merely share an ending
+    (`ate`/`late`), which is a rhyme rather than a morphological repeat.
+    """
+    if generated == target or not generated or not target:
+        return False
+    lo, hi = sorted((generated, target), key=len)
+    return len(lo) >= 3 and len(hi) > len(lo) and hi.startswith(lo)
 
 
 def load_steps(prompt_dir: Path) -> dict[int, Path]:
@@ -273,18 +335,28 @@ def label(generated: str, target: str) -> str:
     return "none"
 
 
-def analyse_run(prompt_dir: Path, target: str) -> dict:
+def analyse_run(prompt_dir: Path, target: str, cue_line: list[str]) -> dict:
     result = reconstruct(prompt_dir)
     if result is None:
         return {"label": "degenerate", "reason": "no graphs or empty metadata"}
 
     tokens, continuation = result
+    # Echo is a property of the generated text, so it is measured even on runs
+    # with no well-defined rhyme word - a run that cycled the prompt line is
+    # exactly the failure the line-level measure exists to catch.
+    generated = first_line(continuation)
+    echo = {
+        "line_echo": generated == cue_line and bool(generated),
+        "line_overlap": line_overlap(generated, cue_line),
+    }
+
     if is_looped(tokens):
         return {
             "label": "degenerate",
             "reason": "generation cycled without terminating; no well-defined rhyme word",
             "continuation": continuation,
             "n_steps": len(tokens),
+            **echo,
         }
 
     found = find_rhyme(tokens)
@@ -294,6 +366,7 @@ def analyse_run(prompt_dir: Path, target: str) -> dict:
             "reason": "no content word found",
             "continuation": continuation,
             "n_steps": len(tokens),
+            **echo,
         }
 
     word, step, merged = found
@@ -305,6 +378,9 @@ def analyse_run(prompt_dir: Path, target: str) -> dict:
         "continuation": continuation,
         "truncated_tail": True,
         "subword_merged": merged,
+        **echo,
+        "rhyme_word_echo": word == target,
+        "inflected_repeat": inflected_repeat(word, target),
     }
 
 
@@ -314,6 +390,12 @@ def main() -> None:
     prompt_set = json.loads(PROMPT_SET_PATH.read_text(encoding="utf-8"))
     prompts: dict[str, dict] = {}
     summary = {"clean": 0, "divergence": 0, "incomplete": 0}
+    echo_counts = {
+        "runs": 0,
+        "line_echo": 0,
+        "rhyme_word_echo": 0,
+        "inflected_repeat": 0,
+    }
 
     for record in prompt_set:
         slug = record["slug"]
@@ -323,9 +405,16 @@ def main() -> None:
             f"rhyme_word={record['rhyme_word']!r} - these must agree"
         )
 
+        cue_line = prompt_line(record["prompt_text"])
         sizes = {
-            size: analyse_run(GRAPHS_DIR / size / slug, target) for size in SIZES
+            size: analyse_run(GRAPHS_DIR / size / slug, target, cue_line)
+            for size in SIZES
         }
+
+        for s in sizes.values():
+            echo_counts["runs"] += 1
+            for key in ("line_echo", "rhyme_word_echo", "inflected_repeat"):
+                echo_counts[key] += bool(s.get(key))
 
         labels = [s["label"] for s in sizes.values()]
         words = [s.get("rhyme_word") for s in sizes.values()]
@@ -363,22 +452,37 @@ def main() -> None:
         "lemma_check": "string_equality",
         "baseline_word": "last content word of the prompt's line 1",
         "stress_note": STRESS_NOTE,
+        "echo_note": ECHO_NOTE,
         "prompts": prompts,
         "summary": summary,
+        "echo_summary": echo_counts,
     }
     OUTPUT_PATH.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")
 
-    print(f"{'prompt':<20} {'size':<14} {'rhyme':<12} {'step':>4} {'label':<12} bucket")
-    print("-" * 82)
+    print(
+        f"{'prompt':<20} {'size':<14} {'rhyme':<12} {'step':>4} {'label':<12} "
+        f"{'echo':<10} {'ovl':>5} bucket"
+    )
+    print("-" * 96)
     for slug, entry in prompts.items():
         for size, s in entry["sizes"].items():
+            marks = []
+            if s.get("line_echo"):
+                marks.append("line")
+            if s.get("rhyme_word_echo"):
+                marks.append("word")
+            if s.get("inflected_repeat"):
+                marks.append("infl")
             print(
                 f"{slug:<20} {size:<14} {str(s.get('rhyme_word', '-')):<12} "
-                f"{str(s.get('rhyme_step', '-')):>4} {s['label']:<12} {entry['bucket']}"
+                f"{str(s.get('rhyme_step', '-')):>4} {s['label']:<12} "
+                f"{','.join(marks) or '-':<10} {s.get('line_overlap', 0):>5.2f} "
+                f"{entry['bucket']}"
             )
         print()
 
     print(f"summary: {summary}")
+    print(f"echo: {echo_counts}")
     if any(s.get("subword_merged") for e in prompts.values() for s in e["sizes"].values()):
         print("NOTE: sub-word merging fired - the tokenizer check predicted it would not")
     print(f"wrote {OUTPUT_PATH.relative_to(REPO_ROOT)}")

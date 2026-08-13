@@ -8,6 +8,42 @@ The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — usin
 
 ---
 
+## Glossary
+
+**Prompt selection** (`tools/prompt_set.py`)
+
+| Term | Meaning | Defined by |
+|---|---|---|
+| rime | A word from its primary-stressed vowel to the end. | `rhyming_part_primary()` |
+| onset clause | Words with identical consonants before the stressed vowel are not rhymes (*rime riche*). Never fires on a vowel-initial word. | `shares_onset()` |
+| `rhymes_all` | Rhyme count over all of CMUdict. Primary pronunciations, alphabetic entries, onset clause applied, self excluded. Reported per prompt. | `family_size()` |
+| `rhymes_common` | The same count restricted to the wordfreq top-10,000 band. | `banded_family_size_all()` |
+| rhyme family | Words sharing one rime. Prompts use one per family. | `candidate_rows()` |
+| affixal | Every available rhyme is a prefix or suffix of the word, so the couplet can be completed by affixation rather than phonological retrieval. Over-inclusive by design; flags for manual inspection, never filters. | `is_affixal()` |
+| decade label | hard = 1–9 rhymes, medium = 10–99, easy = 100+. The integer part of `log10(rhymes_all)`; descriptive only. | `decade_label()` |
+
+**Output judgement** (`tools/rhyme_labels.py`)
+
+| Term | Meaning | Defined by |
+|---|---|---|
+| near rhyme | Primary stressed vowel matches, full rime differs. | `label()` |
+| line echo | The generated line reproduces the prompt's line, compared as word sequences. | `line_echo` |
+| line overlap | Fraction of the prompt line's distinct words reappearing in the generated line. Reported as a number, never thresholded. | `line_overlap()` |
+| rhyme-word echo | The generated line ends on the prompt's line-ending word. | `rhyme_word_echo` |
+| inflected repeat | The rhyme word is not the target but has it as a prefix (grab/grabbed). Prefix only — a suffix rule would fire on ordinary rhymes. | `inflected_repeat()` |
+
+**Feature analysis** (`experiment/tracing-*.py`)
+
+| Term | Meaning | Defined by |
+|---|---|---|
+| planning feature | Influence peaks before the rhyme step. | `peak_step < RHYME_STEP` |
+| execution feature | Influence peaks at or after the rhyme step. | the complement |
+| sustain ratio | Influence at the rhyme step ÷ peak influence. | `sustain_ratio` |
+| rhyme-circuit candidate | A planning feature also active at the rhyme step, ≥50th percentile there, sustain ratio ≥0.3. | `candidates` filter |
+| early spike | First reaches ≥70th percentile prominence early in the sequence. | `early_spikes` |
+
+---
+
 ## Pipeline Overview
 
 ```
