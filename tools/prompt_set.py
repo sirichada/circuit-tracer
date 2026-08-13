@@ -58,44 +58,21 @@ SHORTLIST_SIZE = 30
 SHORTLIST_SEED = 0
 FREQUENCY_BAND_SIZE = 10_000
 
-# One word per rhyme family in a shortlist. Was 2; tightened because the easy
-# band has only ~27 distinct families, so a 5-prompt selection drawn with cap=2
-# risks being five sentences on two rhyme sounds.
+# One word per rhyme family in a candidate list, so a list spans distinct
+# rhyme sounds rather than one family wearing many spellings.
 MAX_PER_FAMILY = 1
 
-# Difficulty bands are ABSOLUTE rhyme counts, not percentile cutoffs.
+# Difficulty is reported as a LOG DECADE of `family_size`, not as a band with
+# tuned cutoffs: hard = 1-9, medium = 10-99, easy = 100+. This is the integer
+# part of log10(family_size), which the continuous analysis already contains,
+# so the labels introduce no parameter of their own. They are descriptive; the
+# headline analysis regresses on log10(family_size) directly.
 #
-# Tertiles were tried and abandoned. Under the primary-stress rule the
-# fraction of band words with zero in-band rhymes rises to 35.8%, above the
-# 33rd percentile, so the hard cutoff lands on 0 - i.e. the hard band becomes
-# "words with no rhyme at all", which a couplet cannot use. Restoring a
-# workable tertile needs a 20,000-word band, which departs further from
-# PeRDict's published bands (largest: 10,000) and pushes "creator" out of the
-# medium band. Absolute thresholds dissolve the problem and let the band stay
-# at 10,000.
-#
-# The 10-19 gap between MEDIUM_MAX and EASY_MIN is deliberate, so medium and
-# easy are separated rather than merely adjacent.
-HARD_RAW_MAX = 1  # counted over ALL of CMUdict - see shortlist_bands
-MEDIUM_MIN, MEDIUM_MAX = 2, 9  # counted within the frequency band
-EASY_MIN = 20  # counted within the frequency band
-
-# A medium word must ALSO not have more rhymes in total than an easy word has
-# usable ones. This is a validity check, not a second difficulty axis: without
-# it, "creator" qualifies as medium on 2 in-band rhymes while actually having
-# 53 in total, its two in-band options being "later" and "greater" - among the
-# most common words in English. That is the same band artifact that disqualifies
-# "aaron" (56 raw) from the hard band.
-#
-# Deliberately tied to EASY_MIN rather than given its own number, so no new
-# free parameter is introduced. Candidate supply does not constrain the choice
-# (a cap of 10 still leaves 76 rhyme families, a cap of 40 leaves 375), which
-# is exactly why the value must come from a reason rather than from its effect.
-MEDIUM_ALL_MAX = EASY_MIN
-
-# A hard word's single rhyme must itself be usable, or the prompt is
-# impossible rather than hard. zipf 3.0 is roughly "occurs in ordinary text".
-HARD_PARTNER_MIN_ZIPF = 3.0
+# Earlier revisions used percentile tertiles, then absolute in-band thresholds
+# with a separate raw-count cap. Both were abandoned: they carried tuned
+# constants that no claim rested on, and a short paper defending them hands
+# reviewers surface to attack. See rhyme_rule_decisions.md.
+DECADE_LABELS = {0: "hard", 1: "medium", 2: "easy"}
 
 CONTENT_TAGS = {"NN", "NNS", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "JJ", "JJR", "JJS"}
 FUNCTION_TAGS = {"PRP", "PRP$", "IN", "DT"}
@@ -171,24 +148,68 @@ RHYMING_PART = {
 # rhymes without inventing an unvalidated threshold.
 RHYME_POOL = {w: rp for w, rp in RHYMING_PART.items() if w.isalpha()}
 
-# rhyming_part -> how many pool words share it. Lets `family_size` be O(1)
-# instead of a scan over ~117k entries per call, which matters because the
-# band selectors call it once per candidate word.
-_POOL_COUNTS = Counter(RHYME_POOL.values())
+ONSET = {
+    w: PRIMARY[w][: len(PRIMARY[w]) - len(rime)].strip() for w, rime in RHYME_POOL.items()
+}
+
+
+def shares_onset(a: str, b: str) -> bool:
+    """Whether the onset clause excludes this pair.
+
+    Two words are not a rhyme if the consonants before the stressed vowel are
+    identical - identical rhyme, or *rime riche*, which English prosody
+    excludes on its own terms (French verse prizes it; English treats it as a
+    failed rhyme). Crossley & Choi 2024 state the same clause for PeRDict
+    (p. 783): "the consonant(s) before the stressed vowel (if present) had to
+    differ". "If present" is read literally - a vowel-initial word has no
+    onset, so the clause cannot fire on it.
+
+    Practically this removes same-word variants that would otherwise look like
+    scarce rhymes: feb/february, theater/theatre, realise/realize,
+    favorite/favourite, licence/license, junior/jr.
+
+    NOT removed, and a standing trap: morphological pairs like titled/entitled
+    and counter/encounter. The onset is the whole pre-stress cluster, so
+    "entitled" gives EH0 N T against "titled"'s T - they differ, and the pair
+    survives. Those need the separate task-mechanism judgement in the manual
+    pass, because a model can complete such a couplet by affixation rather
+    than by phonological retrieval.
+    """
+    oa, ob = ONSET.get(a, ""), ONSET.get(b, "")
+    return bool(oa and ob and oa == ob)
+
+
+# rhyming_part -> Counter of onsets among pool words sharing it. Lets
+# `family_size` be O(1) instead of scanning ~117k entries per call.
+_ONSET_COUNTS: dict[str, Counter] = {}
+for _w, _rp in RHYME_POOL.items():
+    _ONSET_COUNTS.setdefault(_rp, Counter())[ONSET[_w]] += 1
+
+
+def rhyme_partners(word: str) -> list[str]:
+    """Every pool word that rhymes with `word` under the full rule."""
+    rp = RHYMING_PART[word]
+    return [
+        w for w, other in RHYME_POOL.items()
+        if other == rp and w != word and not shares_onset(word, w)
+    ]
 
 
 def family_size(word: str) -> int:
-    """Raw CMUdict rhyme-family size per action_plan.md Phase 1 step 0,
-    computed from each word's primary pronunciation only (see module
-    docstring), counting partners over `RHYME_POOL` rather than all of
-    CMUdict."""
+    """Rhyme-family size: pool words sharing this word's rime, excluding
+    identical-onset pairs (see `shares_onset`). Computed from each word's
+    primary pronunciation only (see module docstring)."""
     word = word.lower()
     if word not in PRIMARY:
         raise ValueError(f"{word!r} not found in CMUdict")
     if word not in RHYMING_PART:
         raise ValueError(f"{word!r} has no primary-stressed vowel in CMUdict")
-    rp = RHYMING_PART[word]
-    return _POOL_COUNTS[rp] - (1 if word in RHYME_POOL else 0)
+    counts = _ONSET_COUNTS[RHYMING_PART[word]]
+    total = sum(counts.values()) - (1 if word in RHYME_POOL else 0)
+    onset = ONSET.get(word, "")
+    if not onset:  # clause cannot fire on a vowel-initial word
+        return total
+    return total - (counts[onset] - (1 if word in RHYME_POOL else 0))
 
 
 def reference_word_list() -> list[str]:
@@ -306,64 +327,75 @@ def diversify_by_family(
     return result[:n]
 
 
-def hard_pool(band: set[str]) -> list[tuple[str, int]]:
-    """Hard band, defined on RAW CMUdict scarcity rather than in-band count.
+def decade_label(size: int) -> str:
+    """Descriptive difficulty label: the integer part of log10(family_size).
 
-    This asymmetry with medium/easy is the whole point. Defining hard as "1
-    in-band rhyme" yields 864 words, nearly all band artifacts: "aaron" has 56
-    raw CMUdict rhymes, "annie" 49, "antenna" 44, "allows" 40. Their in-band
-    count is 1 only because the frequency band hides the rest - and the model
-    knows those words regardless, so they are not hard to rhyme.
-
-    action_plan.md reached this conclusion once already, rejecting "running"
-    (in-band 1, raw 9) for "article" (raw 1): "band-restricted scarcity
-    doesn't necessarily reflect true rhyme difficulty, and the hard band
-    should reflect the latter."
-
-    Medium and easy don't need this. Easy at in-band >=20 implies raw >=20, so
-    no artifact is possible; medium is exposed only in the harmless direction.
-
-    Words are still required to be in `band`, for naturalness - a scarce rhyme
-    on a word nobody uses makes an odd prompt. The partner must clear
-    HARD_PARTNER_MIN_ZIPF so the couplet is completable.
+    hard = 1-9, medium = 10-99, easy = 100+. Reported alongside the count, not
+    used to select or to carry a claim - the analysis regresses on
+    log10(family_size) directly. Coarse by design: "hard" spans a 9x range, so
+    a word's actual count is the thing to quote. `article`, with exactly one
+    rhyme in the entire language, is worth stating as its own fact rather than
+    folding into a label.
     """
-    out = []
-    for word in band:
-        if word not in RHYMING_PART:
+    if size < 1:
+        return "none"
+    return DECADE_LABELS.get(min(len(str(size)) - 1, 2), "easy")
+
+
+def is_affixal(a: str, b: str) -> bool:
+    """Screen for a morphological pair: one word is a prefix or suffix of the
+    other (en+titled, title+d).
+
+    Over-inclusive on purpose - it flags particle/article and adoption/option,
+    where neither word derives from the other - so it is a prompt for human
+    judgement, not a filter. The concern is a task confound rather than rhyme
+    validity: if a word's only rhyme is a morphological superset of it, the
+    model can complete the couplet by affixation instead of by phonological
+    retrieval, plausibly exercising a different circuit from the one being
+    measured.
+
+    Concentrated at the low end of the axis, which is where sampling is
+    tightest: of frequency-band words with exactly one rhyme, 39% have only an
+    affixal partner, against 5.5% at 2-9 and 0.4% at 10-40.
+    """
+    lo, hi = sorted((a, b), key=len)
+    return len(lo) < len(hi) and (hi.startswith(lo) or hi.endswith(lo))
+
+
+def candidate_rows(band: set[str]) -> list[tuple[str, int, str, float, bool]]:
+    """Every frequency-band content word, one per rhyme family, with the data
+    the manual pass needs: rhyme count, its most usable partner and that
+    partner's frequency, and the affixal screen.
+
+    Replaces the three per-band shortlists. Selection is now judgement against
+    a range-spanning list, because the analysis is continuous in
+    log10(family_size) and bands are only descriptive - so band machinery
+    would constrain sampling without carrying any claim. It also removes an
+    artifact of that machinery: no rule could produce a word between 21 and 53
+    rhymes, since the medium cap sat at 20 and the easy band began at 54.
+    """
+    rows: list[tuple[str, int, str, float, bool]] = []
+    seen: set[str] = set()
+    for word in sorted(band):
+        if word not in RHYMING_PART or RHYMING_PART[word] in seen:
             continue
-        if family_size(word) != HARD_RAW_MAX:
+        if nltk.pos_tag([word])[0][1] not in CONTENT_TAGS:
             continue
-        rp = RHYMING_PART[word]
-        partners = [w for w, r in RHYME_POOL.items() if r == rp and w != word]
+        partners = rhyme_partners(word)
         if not partners:
             continue
-        if zipf_frequency(partners[0], "en") < HARD_PARTNER_MIN_ZIPF:
-            continue
-        out.append((word, family_size(word)))
-    return out
-
-
-def shortlist_bands(
-    sizes: dict[str, int], band: set[str]
-) -> tuple[list[tuple[str, int]], list[tuple[str, int]], list[tuple[str, int]]]:
-    """Shortlists for the three difficulty bands.
-
-    `sizes` holds in-band rhyme counts (used for medium and easy); hard is
-    computed separately from raw counts (see `hard_pool`). The three bands are
-    a graded difficulty axis rather than a binary hard-vs-easy contrast, per
-    reviewer feedback (D2/W2) asking for evidence distinguishing genuine
-    planning from a two-point artifact.
-    """
-    medium_pool = [
-        (w, n)
-        for w, n in sizes.items()
-        if MEDIUM_MIN <= n <= MEDIUM_MAX and family_size(w) <= MEDIUM_ALL_MAX
-    ]
-    easy_pool = [(w, n) for w, n in sizes.items() if n >= EASY_MIN]
-    hard = diversify_by_family(hard_pool(band), SHORTLIST_SIZE)
-    easy = diversify_by_family(easy_pool, SHORTLIST_SIZE, reverse=True)
-    medium = diversify_by_family(medium_pool, SHORTLIST_SIZE)
-    return hard, easy, medium
+        seen.add(RHYMING_PART[word])
+        best = max(partners, key=lambda p: zipf_frequency(p, "en"))
+        rows.append(
+            (
+                word,
+                family_size(word),
+                best,
+                zipf_frequency(best, "en"),
+                all(is_affixal(word, p) for p in partners),
+            )
+        )
+    return sorted(rows, key=lambda r: r[1])
 
 
 def is_content_word(word: str) -> bool:
@@ -410,32 +442,42 @@ def main() -> None:
     band = frequency_band()
     banded_sizes, _, _ = build_banded_distribution(band)
     print_distribution_summary("Banded", banded_sizes)
-    print(
-        f"Absolute bands -> hard: raw CMUdict rhymes == {HARD_RAW_MAX} "
-        f"(partner zipf >= {HARD_PARTNER_MIN_ZIPF}); "
-        f"medium: {MEDIUM_MIN}-{MEDIUM_MAX} in-band and <= {MEDIUM_ALL_MAX} raw; "
-        f"easy: >= {EASY_MIN} in-band (top decile of the band)"
-    )
 
-    hard, easy, medium = shortlist_bands(banded_sizes, band)
-    print(f"\nHard shortlist (raw scarcity), {len(hard)} words - shown as word(raw):")
-    print(", ".join(f"{w}({n})" for w, n in hard))
-    print(f"\nEasy shortlist (in-band >= {EASY_MIN}), {len(easy)} words:")
-    print(", ".join(f"{w}({n})" for w, n in easy))
-    print(
-        f"\nMedium shortlist (in-band {MEDIUM_MIN}-{MEDIUM_MAX}, "
-        f"raw <= {MEDIUM_ALL_MAX}), {len(medium)} words:"
-    )
-    print(", ".join(f"{w}({n})" for w, n in medium))
+    rows = candidate_rows(band)
+    print(f"\nRange-spanning candidates: {len(rows)} content words, "
+          f"one per rhyme family, family_size {rows[0][1]}-{rows[-1][1]}")
+    by_decade: dict[str, int] = {}
+    for _, size, _, _, _ in rows:
+        by_decade[decade_label(size)] = by_decade.get(decade_label(size), 0) + 1
+    print("  by decade: " + ", ".join(f"{k}={v}" for k, v in by_decade.items()))
+    affixal = sum(1 for r in rows if r[4])
+    print(f"  only-affixal rhyme (needs a human call): {affixal}")
 
-    print("\nRepetition-control candidates (content-word POS tags, high banded family size):")
+    print("\n  sample across the range (word, size, best partner, its zipf):")
+    for target in (1, 2, 4, 8, 16, 32, 64, 128, 256):
+        near = [r for r in rows if r[1] == target]
+        if near:
+            w, n, p, z, aff = max(near, key=lambda r: r[3])
+            print(f"    {n:>4}  {w:<12} -> {p:<14} zipf {z:.1f}"
+                  + ("  [affixal]" if aff else ""))
+
+    print("\nRepetition-control candidates (content-word POS tags, abundant rhymes):")
     control = repetition_control_candidates(banded_sizes)
     print(", ".join(f"{w}({n},{tag})" for w, n, tag in control))
 
     # Sanity checks: "it" resolves via its primary pronunciation; "tear" and
     # "again" no longer inherit a rhyme family from their secondary
-    # pronunciation (see module docstring).
-    print(f"\nSanity check - 'it' raw family_size: {family_size('it')}")
+    # pronunciation (see module docstring); the onset clause must NOT fire on
+    # article/particle, which is a load-bearing prompt-set pick.
+    print(f"\nSanity check - 'it' family_size: {family_size('it')}")
+    print(
+        "Sanity check - onset clause on article/particle (must be False): "
+        f"{shares_onset('particle', 'article')}"
+    )
+    print(
+        "Sanity check - onset clause on theater/theatre (must be True):  "
+        f"{shares_onset('theater', 'theatre')}"
+    )
     tear_rhymes = [w for w in RHYME_POOL if w != "tear" and RHYME_POOL[w] == RHYMING_PART["tear"]]
     again_rhymes = [
         w for w in RHYME_POOL if w != "again" and RHYME_POOL[w] == RHYMING_PART["again"]
