@@ -42,8 +42,12 @@ Run directly to print the shortlists; final word picks and sentences are
 decided by hand and hardcoded into `tools/prompt_set.json`.
 """
 
+import argparse
+import json
 import random
 from collections import Counter
+from datetime import datetime, timezone
+from pathlib import Path
 
 import cmudict
 import nltk
@@ -57,6 +61,21 @@ UPPER_PERCENTILE = 67
 SHORTLIST_SIZE = 30
 SHORTLIST_SEED = 0
 FREQUENCY_BAND_SIZE = 10_000
+
+PROMPT_SET_PATH = Path(__file__).parent / "prompt_set.json"
+TOKENIZER_REPORT_PATH = Path(__file__).parent.parent / "experiment" / "tokenizer_check_report.json"
+
+# google/gemma-3-{270m,1b-pt,4b-pt} are gated HF repos; --check-tokenizer
+# requires `transformers` and a HF auth token with access.
+TOKENIZER_MODELS = ["google/gemma-3-270m", "google/gemma-3-1b-pt", "google/gemma-3-4b-pt"]
+
+# Named candidates from the multi-prompt-revision gap-fill handoff, keyed by
+# the gap they were proposed to fill.
+NAMED_CANDIDATES = {
+    "second_1_rhyme": ["strength", "length", "reasons", "seasons"],
+    "polysyllabic_26_120": ["transfer", "reversed", "allow"],
+}
+GAP_6_8_SIZES = {6, 7, 8}
 
 # One word per rhyme family in a candidate list, so a list spans distinct
 # rhyme sounds rather than one family wearing many spellings.
@@ -210,6 +229,16 @@ def family_size(word: str) -> int:
     if not onset:  # clause cannot fire on a vowel-initial word
         return total
     return total - (counts[onset] - (1 if word in RHYME_POOL else 0))
+
+
+def syllable_count(word: str) -> int:
+    """Vowel-phone count from the word's primary CMUdict pronunciation
+    (phones ending in a stress digit 0/1/2 are vowels; consonants carry no
+    stress digit)."""
+    word = word.lower()
+    if word not in PRIMARY:
+        raise ValueError(f"{word!r} not found in CMUdict")
+    return sum(1 for p in PRIMARY[word].split() if p[-1] in "012")
 
 
 def reference_word_list() -> list[str]:
@@ -417,6 +446,41 @@ def candidate_rows(band: set[str]) -> list[tuple[list[tuple[str, int]], str, flo
     return sorted(rows, key=lambda r: r[0][0][1])
 
 
+GAP_6_8_SHORTLIST_SIZE = 15
+
+
+def gap_6_8_candidates(band: set[str] | None = None) -> list[dict]:
+    """Shortlist for the family_size 6-8 gap - between 5 ("treasure") and 9
+    ("brother") in the current prompt set, which `main()`'s spread sample
+    (4, 8, 16, ...) skips over.
+
+    Excludes affixal-only families (see `is_affixal`) since those need a
+    human call anyway, then keeps the `GAP_6_8_SHORTLIST_SIZE` families whose
+    best rhyme partner has the highest wordfreq zipf score, as a naturalness
+    proxy - a rare rhyme partner makes for an awkward couplet line even when
+    the head word itself is common. `candidate_rows` already yields one row
+    per family, so this is "several usable options" per the gap-fill brief,
+    not every 6-8 family in the band (there are hundreds)."""
+    band = band if band is not None else frequency_band()
+    rows = candidate_rows(band)
+    options = []
+    for members, best, best_zipf, affixal in rows:
+        word, size = members[0]
+        if size in GAP_6_8_SIZES and not affixal:
+            options.append(
+                {
+                    "word": word,
+                    "rhymes_all": size,
+                    "best_rhyme_partner": best,
+                    "best_rhyme_partner_zipf": round(best_zipf, 2),
+                    "affixal_only_rhyme": affixal,
+                    "syllables": syllable_count(word),
+                }
+            )
+    options.sort(key=lambda o: o["best_rhyme_partner_zipf"], reverse=True)
+    return options[:GAP_6_8_SHORTLIST_SIZE]
+
+
 def is_content_word(word: str) -> bool:
     tag = nltk.pos_tag([word])[0][1]
     return tag in CONTENT_TAGS
@@ -446,6 +510,161 @@ def print_distribution_summary(label: str, sizes: dict[str, int]) -> None:
     print(f"{label}: {len(sizes)} words, {zero} zero-rhyme ({100 * zero / len(sizes):.1f}%)")
     for p in (10, 25, 33, 50, 67, 75, 90):
         print(f"  {p}th percentile: {percentile(sorted_sizes, p):.1f}")
+
+
+def load_tokenizers(models: list[str] = TOKENIZER_MODELS) -> dict:
+    """Load one `AutoTokenizer` per model. Imports `transformers` locally so
+    plain `python tools/prompt_set.py` (no --check-tokenizer) has zero HF/
+    model dependency."""
+    from transformers import AutoTokenizer
+
+    return {m: AutoTokenizer.from_pretrained(m) for m in models}
+
+
+def tokenizers_share_vocab(tokenizers: dict) -> bool:
+    """Whether every tokenizer in `tokenizers` has an identical vocabulary.
+    Verifies rather than assumes the three Gemma-3 sizes share one tokenizer
+    - a prior pipeline stage only ever checked google/gemma-3-4b-pt."""
+    vocabs = [t.get_vocab() for t in tokenizers.values()]
+    return all(v == vocabs[0] for v in vocabs[1:])
+
+
+def tokenize_leading_space(word: str, tokenizers: dict) -> dict[str, list[str]]:
+    """Per-model token strings for `" word"` (leading space, mid-sentence
+    form) via add_special_tokens=False."""
+    form = " " + word
+    result = {}
+    for name, tok in tokenizers.items():
+        ids = tok(form, add_special_tokens=False)["input_ids"]
+        result[name] = [tok.decode([i]) for i in ids]
+    return result
+
+
+def build_tokenizer_report(
+    existing_entries: list[dict],
+    named_candidates: dict[str, list[str]],
+    gap_options: list[dict],
+    models: list[str] = TOKENIZER_MODELS,
+) -> dict:
+    tokenizers = load_tokenizers(models)
+    shared = tokenizers_share_vocab(tokenizers)
+    reference_model = models[0]
+
+    entries = []
+
+    for entry in existing_entries:
+        word = entry["rhyme_word"]
+        tokens_by_model = tokenize_leading_space(word, tokenizers)
+        tokens = tokens_by_model[reference_model]
+        entries.append(
+            {
+                "word": word,
+                "source": "existing_prompt_set",
+                "slug": entry["slug"],
+                "rhymes_all": entry["rhymes_all"],
+                "difficulty": entry.get("difficulty"),
+                "syllables": syllable_count(word),
+                "leading_space_form": " " + word,
+                "tokens": tokens,
+                "tokens_by_model": tokens_by_model,
+                "single_token": len(tokens) == 1,
+            }
+        )
+
+    for gap, words in named_candidates.items():
+        for word in words:
+            tokens_by_model = tokenize_leading_space(word, tokenizers)
+            tokens = tokens_by_model[reference_model]
+            try:
+                size = family_size(word)
+            except ValueError:
+                size = None
+            entries.append(
+                {
+                    "word": word,
+                    "source": "named_candidate",
+                    "target_gap": gap,
+                    "rhymes_all": size,
+                    "syllables": syllable_count(word) if word in PRIMARY else None,
+                    "leading_space_form": " " + word,
+                    "tokens": tokens,
+                    "tokens_by_model": tokens_by_model,
+                    "single_token": len(tokens) == 1,
+                }
+            )
+
+    for option in gap_options:
+        word = option["word"]
+        tokens_by_model = tokenize_leading_space(word, tokenizers)
+        tokens = tokens_by_model[reference_model]
+        entries.append(
+            {
+                "word": word,
+                "source": "gap_fill_option",
+                "target_gap": "6_8",
+                "rhymes_all": option["rhymes_all"],
+                "best_rhyme_partner": option["best_rhyme_partner"],
+                "best_rhyme_partner_zipf": option["best_rhyme_partner_zipf"],
+                "affixal_only_rhyme": option["affixal_only_rhyme"],
+                "syllables": option["syllables"],
+                "leading_space_form": " " + word,
+                "tokens": tokens,
+                "tokens_by_model": tokens_by_model,
+                "single_token": len(tokens) == 1,
+            }
+        )
+
+    existing_splits = [
+        e["word"] for e in entries if e["source"] == "existing_prompt_set" and not e["single_token"]
+    ]
+    named_results = {
+        e["word"]: e["single_token"] for e in entries if e["source"] == "named_candidate"
+    }
+    gap_6_8 = [e for e in entries if e["source"] == "gap_fill_option"]
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "tokenizer_models_checked": models,
+        "tokenizer_shared_across_sizes": shared,
+        "entries": entries,
+        "summary": {
+            "total_checked": len(entries),
+            "existing_prompt_set_splits": existing_splits,
+            "named_candidate_results": named_results,
+            "gap_6_8_options": [e["word"] for e in gap_6_8],
+        },
+    }
+
+
+def print_tokenizer_table(report: dict) -> None:
+    print(f"\nShared tokenizer across {report['tokenizer_models_checked']}: "
+          f"{report['tokenizer_shared_across_sizes']}")
+    print(f"\n{'word':<14}{'source':<20}{'rhymes_all':<12}{'syllables':<11}{'single_token'}")
+    for e in report["entries"]:
+        rhymes_all = e["rhymes_all"] if e["rhymes_all"] is not None else "?"
+        syllables = e["syllables"] if e["syllables"] is not None else "?"
+        print(
+            f"{e['word']:<14}{e['source']:<20}{str(rhymes_all):<12}"
+            f"{str(syllables):<11}{e['single_token']}"
+        )
+    splits = report["summary"]["existing_prompt_set_splits"]
+    print(f"\nExisting prompt_set.json words that split into multiple tokens: {splits or 'none'}")
+
+
+def run_tokenizer_check() -> None:
+    with open(PROMPT_SET_PATH, encoding="utf-8") as f:
+        existing_entries = json.load(f)
+
+    print("Checking tokenizer(s), computing gap-6-8 candidates...")
+    gap_options = gap_6_8_candidates()
+    report = build_tokenizer_report(existing_entries, NAMED_CANDIDATES, gap_options)
+
+    print_tokenizer_table(report)
+
+    TOKENIZER_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(TOKENIZER_REPORT_PATH, "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+    print(f"\nWrote {TOKENIZER_REPORT_PATH}")
 
 
 def main() -> None:
@@ -513,4 +732,16 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--check-tokenizer",
+        action="store_true",
+        help="Tokenizer-check prompt_set.json's words plus gap-fill candidates against "
+        "the gated Gemma-3 tokenizers, writing experiment/tokenizer_check_report.json. "
+        "Requires transformers and HF access to google/gemma-3-{270m,1b-pt,4b-pt}.",
+    )
+    args = parser.parse_args()
+    if args.check_tokenizer:
+        run_tokenizer_check()
+    else:
+        main()

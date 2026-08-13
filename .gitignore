@@ -82,6 +82,7 @@ demos/**/graph_files
 demos/**/*.json
 experiment/graphs
 experiment/graphs.bak-*
+experiment/graphs *-*-*
 experiment/*.log.err
 .DS_Store
 ./github
