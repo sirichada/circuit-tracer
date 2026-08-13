@@ -1,44 +1,107 @@
 [
   {
-    "slug": "original",
-    "prompt_text": "A rhyming couplet:\nHe saw a carrot and had to grab it,\n",
-    "rhyme_word": "grab",
-    "rhymes_all": 39,
-    "rhymes_common": 4,
-    "role": "original",
-    "note": "Replication anchor for the paper's original example; exempt from the difficulty bands. The couplet actually rhymes across a word boundary ('grab it'/'rabbit'), which the single-word metric cannot score - the counts here are for 'grab' alone."
-  },
-  {
-    "slug": "hard",
-    "prompt_text": "A rhyming couplet:\nHe studied every word inside the article,\n",
-    "rhyme_word": "article",
+    "slug": "greatest",
+    "prompt_text": "A rhyming couplet:\nHe trained for years to be the greatest,\n",
+    "rhyme_word": "greatest",
     "rhymes_all": 1,
-    "rhymes_common": 1,
-    "role": "hard"
+    "difficulty": "hard"
   },
   {
-    "slug": "medium",
-    "prompt_text": "A rhyming couplet:\nShe dreamed of being a famous creator,\n",
-    "rhyme_word": "creator",
-    "rhymes_all": 53,
-    "rhymes_common": 2,
-    "role": "medium"
+    "slug": "possible",
+    "prompt_text": "A rhyming couplet:\nShe said the climb was hard but possible,\n",
+    "rhyme_word": "possible",
+    "rhymes_all": 2,
+    "difficulty": "hard"
   },
   {
-    "slug": "easy",
-    "prompt_text": "A rhyming couplet:\nHe rushed to breakfast, running late,\n",
-    "rhyme_word": "late",
+    "slug": "nursery",
+    "prompt_text": "A rhyming couplet:\nThey painted stars across the nursery,\n",
+    "rhyme_word": "nursery",
+    "rhymes_all": 3,
+    "difficulty": "hard"
+  },
+  {
+    "slug": "priority",
+    "prompt_text": "A rhyming couplet:\nThe roof was now his one priority,\n",
+    "rhyme_word": "priority",
+    "rhymes_all": 4,
+    "difficulty": "hard"
+  },
+  {
+    "slug": "treasure",
+    "prompt_text": "A rhyming couplet:\nThe pirates buried all of their treasure,\n",
+    "rhyme_word": "treasure",
+    "rhymes_all": 5,
+    "difficulty": "hard"
+  },
+  {
+    "slug": "brother",
+    "prompt_text": "A rhyming couplet:\nHe shared a bedroom with his brother,\n",
+    "rhyme_word": "brother",
+    "rhymes_all": 9,
+    "difficulty": "hard"
+  },
+  {
+    "slug": "wood",
+    "prompt_text": "A rhyming couplet:\nHe gathered up a heavy load of wood,\n",
+    "rhyme_word": "wood",
+    "rhymes_all": 12,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "thunder",
+    "prompt_text": "A rhyming couplet:\nThe sky lit up and then came thunder,\n",
+    "rhyme_word": "thunder",
+    "rhymes_all": 14,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "breaking",
+    "prompt_text": "A rhyming couplet:\nThe waves against the rocks kept breaking,\n",
+    "rhyme_word": "breaking",
+    "rhymes_all": 16,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "crown",
+    "prompt_text": "A rhyming couplet:\nThe king had gone and lost his golden crown,\n",
+    "rhyme_word": "crown",
+    "rhymes_all": 23,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "adjust",
+    "prompt_text": "A rhyming couplet:\nThe saddle slipped and he had to adjust,\n",
+    "rhyme_word": "adjust",
+    "rhymes_all": 38,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "shut",
+    "prompt_text": "A rhyming couplet:\nHe heard a noise and pulled the curtain shut,\n",
+    "rhyme_word": "shut",
+    "rhymes_all": 38,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "become",
+    "prompt_text": "A rhyming couplet:\nShe wondered what her son would soon become,\n",
+    "rhyme_word": "become",
+    "rhymes_all": 71,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "shot",
+    "prompt_text": "A rhyming couplet:\nThe hunter raised his rifle for the shot,\n",
+    "rhyme_word": "shot",
+    "rhymes_all": 82,
+    "difficulty": "medium"
+  },
+  {
+    "slug": "ten",
+    "prompt_text": "A rhyming couplet:\nThe clock above the door had just struck ten,\n",
+    "rhyme_word": "ten",
     "rhymes_all": 115,
-    "rhymes_common": 24,
-    "role": "easy"
-  },
-  {
-    "slug": "repetition_control",
-    "prompt_text": "A rhyming couplet:\nThere's really nothing more to say,\n",
-    "rhyme_word": "say",
-    "rhymes_all": 334,
-    "rhymes_common": 44,
-    "role": "repetition_control",
-    "note": "Selected for being a content word unlikely to be grammatically echoed, not for rhyme-family size; exempt from the difficulty bands."
+    "difficulty": "easy"
   }
 ]

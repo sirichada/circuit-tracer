@@ -62,17 +62,17 @@ FREQUENCY_BAND_SIZE = 10_000
 # rhyme sounds rather than one family wearing many spellings.
 MAX_PER_FAMILY = 1
 
-# Difficulty is reported as a LOG DECADE of `family_size`, not as a band with
-# tuned cutoffs: hard = 1-9, medium = 10-99, easy = 100+. This is the integer
-# part of log10(family_size), which the continuous analysis already contains,
-# so the labels introduce no parameter of their own. They are descriptive; the
+# Difficulty is a label read off `family_size`, not a band with tuned cutoffs:
+# hard = 1-9, medium = 10-99, easy = 100+. It is the integer part of
+# log10(family_size), which the continuous analysis already contains, so the
+# labels introduce no parameter of their own. They are descriptive; the
 # headline analysis regresses on log10(family_size) directly.
 #
 # Earlier revisions used percentile tertiles, then absolute in-band thresholds
 # with a separate raw-count cap. Both were abandoned: they carried tuned
 # constants that no claim rested on, and a short paper defending them hands
 # reviewers surface to attack. See rhyme_rule_decisions.md.
-DECADE_LABELS = {0: "hard", 1: "medium", 2: "easy"}
+DIFFICULTY_LABELS = {0: "hard", 1: "medium", 2: "easy"}
 
 CONTENT_TAGS = {"NN", "NNS", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "JJ", "JJR", "JJS"}
 FUNCTION_TAGS = {"PRP", "PRP$", "IN", "DT"}
@@ -327,7 +327,7 @@ def diversify_by_family(
     return result[:n]
 
 
-def decade_label(size: int) -> str:
+def difficulty_label(size: int) -> str:
     """Descriptive difficulty label: the integer part of log10(family_size).
 
     hard = 1-9, medium = 10-99, easy = 100+. Reported alongside the count, not
@@ -339,7 +339,7 @@ def decade_label(size: int) -> str:
     """
     if size < 1:
         return "none"
-    return DECADE_LABELS.get(min(len(str(size)) - 1, 2), "easy")
+    return DIFFICULTY_LABELS.get(min(len(str(size)) - 1, 2), "easy")
 
 
 def is_affixal(a: str, b: str) -> bool:
@@ -468,11 +468,11 @@ def main() -> None:
         f"up to {MEMBERS_SHOWN} words each, "
         f"family_size {rows[0][0][0][1]}-{rows[-1][0][0][1]}"
     )
-    by_decade: dict[str, int] = {}
+    by_difficulty: dict[str, int] = {}
     for members, _, _, _ in rows:
-        label = decade_label(members[0][1])
-        by_decade[label] = by_decade.get(label, 0) + 1
-    print("  by decade: " + ", ".join(f"{k}={v}" for k, v in by_decade.items()))
+        label = difficulty_label(members[0][1])
+        by_difficulty[label] = by_difficulty.get(label, 0) + 1
+    print("  by difficulty: " + ", ".join(f"{k}={v}" for k, v in by_difficulty.items()))
     affixal = sum(1 for r in rows if r[3])
     print(f"  only-affixal rhyme (needs a human call): {affixal}")
 

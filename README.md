@@ -20,7 +20,7 @@ The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — usin
 | `rhymes_common` | The same count restricted to the wordfreq top-10,000 band. | `banded_family_size_all()` |
 | rhyme family | Words sharing one rime. Prompts use one per family. | `candidate_rows()` |
 | affixal | Every available rhyme is a prefix or suffix of the word, so the couplet can be completed by affixation rather than phonological retrieval. Over-inclusive by design; flags for manual inspection, never filters. | `is_affixal()` |
-| decade label | hard = 1–9 rhymes, medium = 10–99, easy = 100+. The integer part of `log10(rhymes_all)`; descriptive only. | `decade_label()` |
+| difficulty | hard = 1–9 rhymes, medium = 10–99, easy = 100+. The integer part of `log10(rhymes_all)`; descriptive only, never used to select. | `difficulty_label()` |
 
 **Output judgement** (`tools/rhyme_labels.py`)
 
