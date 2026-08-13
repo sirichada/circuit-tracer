@@ -362,10 +362,14 @@ def is_affixal(a: str, b: str) -> bool:
     return len(lo) < len(hi) and (hi.startswith(lo) or hi.endswith(lo))
 
 
-def candidate_rows(band: set[str]) -> list[tuple[str, int, str, float, bool]]:
-    """Every frequency-band content word, one per rhyme family, with the data
-    the manual pass needs: rhyme count, its most usable partner and that
-    partner's frequency, and the affixal screen.
+MEMBERS_SHOWN = 3
+
+
+def candidate_rows(band: set[str]) -> list[tuple[list[tuple[str, int]], str, float, bool]]:
+    """One row per rhyme family, with the data the manual pass needs: up to
+    `MEMBERS_SHOWN` usable words from the family and their rhyme counts, the
+    family's most usable partner and that partner's frequency, and the affixal
+    screen.
 
     Replaces the three per-band shortlists. Selection is now judgement against
     a range-spanning list, because the analysis is continuous in
@@ -373,29 +377,44 @@ def candidate_rows(band: set[str]) -> list[tuple[str, int, str, float, bool]]:
     would constrain sampling without carrying any claim. It also removes an
     artifact of that machinery: no rule could produce a word between 21 and 53
     rhymes, since the medium cap sat at 20 and the easy band began at 54.
+
+    Several words per family are shown, ranked by frequency, because which
+    member of a family is usable is a sentence-writability judgement rather
+    than a phonological one - "late" and "ate" are the same design point, but
+    only one of them writes a natural line. An earlier version kept the
+    alphabetically first member and dropped the rest, which hid that choice
+    (and biased the list toward a- and b-words). Members of one family differ
+    slightly in count, since the onset clause subtracts a different number of
+    same-onset words for each, so each is listed with its own.
     """
-    rows: list[tuple[str, int, str, float, bool]] = []
-    seen: set[str] = set()
-    for word in sorted(band):
-        if word not in RHYMING_PART or RHYMING_PART[word] in seen:
+    families: dict[str, list[tuple[str, float]]] = {}
+    for word in band:
+        if word not in RHYMING_PART:
             continue
         if nltk.pos_tag([word])[0][1] not in CONTENT_TAGS:
             continue
-        partners = rhyme_partners(word)
-        if not partners:
+        families.setdefault(RHYMING_PART[word], []).append((word, zipf_frequency(word, "en")))
+
+    rows: list[tuple[list[tuple[str, int]], str, float, bool]] = []
+    for members in families.values():
+        ranked = [w for w, _ in sorted(members, key=lambda m: (-m[1], m[0]))]
+        # The onset clause can leave one member of a family with no partner
+        # while others still have several, so head on the first that does.
+        head = next((w for w in ranked if rhyme_partners(w)), None)
+        if head is None:
             continue
-        seen.add(RHYMING_PART[word])
+        ranked = [head] + [w for w in ranked if w != head]
+        partners = rhyme_partners(head)
         best = max(partners, key=lambda p: zipf_frequency(p, "en"))
         rows.append(
             (
-                word,
-                family_size(word),
+                [(w, family_size(w)) for w in ranked[:MEMBERS_SHOWN]],
                 best,
                 zipf_frequency(best, "en"),
-                all(is_affixal(word, p) for p in partners),
+                all(is_affixal(head, p) for p in partners),
             )
         )
-    return sorted(rows, key=lambda r: r[1])
+    return sorted(rows, key=lambda r: r[0][0][1])
 
 
 def is_content_word(word: str) -> bool:
@@ -444,22 +463,29 @@ def main() -> None:
     print_distribution_summary("Banded", banded_sizes)
 
     rows = candidate_rows(band)
-    print(f"\nRange-spanning candidates: {len(rows)} content words, "
-          f"one per rhyme family, family_size {rows[0][1]}-{rows[-1][1]}")
+    print(
+        f"\nRange-spanning candidates: {len(rows)} rhyme families, "
+        f"up to {MEMBERS_SHOWN} words each, "
+        f"family_size {rows[0][0][0][1]}-{rows[-1][0][0][1]}"
+    )
     by_decade: dict[str, int] = {}
-    for _, size, _, _, _ in rows:
-        by_decade[decade_label(size)] = by_decade.get(decade_label(size), 0) + 1
+    for members, _, _, _ in rows:
+        label = decade_label(members[0][1])
+        by_decade[label] = by_decade.get(label, 0) + 1
     print("  by decade: " + ", ".join(f"{k}={v}" for k, v in by_decade.items()))
-    affixal = sum(1 for r in rows if r[4])
+    affixal = sum(1 for r in rows if r[3])
     print(f"  only-affixal rhyme (needs a human call): {affixal}")
 
-    print("\n  sample across the range (word, size, best partner, its zipf):")
+    print("\n  sample across the range (family words, best partner, its zipf):")
     for target in (1, 2, 4, 8, 16, 32, 64, 128, 256):
-        near = [r for r in rows if r[1] == target]
+        near = [r for r in rows if r[0][0][1] == target]
         if near:
-            w, n, p, z, aff = max(near, key=lambda r: r[3])
-            print(f"    {n:>4}  {w:<12} -> {p:<14} zipf {z:.1f}"
-                  + ("  [affixal]" if aff else ""))
+            members, p, z, aff = max(near, key=lambda r: r[2])
+            words = ", ".join(f"{w}({n})" for w, n in members)
+            print(
+                f"    {target:>4}  {words:<40} -> {p:<14} zipf {z:.1f}"
+                + ("  [affixal]" if aff else "")
+            )
 
     print("\nRepetition-control candidates (content-word POS tags, abundant rhymes):")
     control = repetition_control_candidates(banded_sizes)
