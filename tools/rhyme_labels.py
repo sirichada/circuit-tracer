@@ -45,7 +45,7 @@ from pathlib import Path
 
 import nltk
 
-from prompt_set import FUNCTION_TAGS, PRIMARY, RHYMING_PART
+from prompt_set import FUNCTION_TAGS, PRIMARY, RHYMING_PART, shares_onset
 
 REPO_ROOT = Path(__file__).parent.parent
 PROMPT_SET_PATH = Path(__file__).parent / "prompt_set.json"
@@ -75,11 +75,14 @@ STRESS_NOTE = (
 )
 
 ONSET_NOTE = (
-    "PeRDict's paper states a third clause - the consonants before the stressed "
-    "vowel must differ (p. 783) - but their published counts fit better without "
-    "it (93.5% vs 86.4-86.9% under either reading of 'if present'), so it is "
-    "deliberately not implemented here. The identical-word exclusion below is "
-    "kept as a separate rule instead."
+    "Identical onsets are excluded: rime riche, which English prosody treats as "
+    "a failed rhyme. Crossley & Choi 2024 state the same clause (p. 783), read "
+    "literally on 'if present', so it cannot fire on a vowel-initial word. "
+    "Note their released database appears not to apply it - our counts fit "
+    "their published numbers better without it (93.5% vs 86.9%) - so counts "
+    "here differ slightly from that database. The rule is adopted on the "
+    "prosodic argument, not on reconstruction. It does NOT remove morphological "
+    "pairs such as titled/entitled, whose onsets differ (T vs EH0 N T)."
 )
 
 CROSS_WORD_NOTE = (
@@ -260,7 +263,9 @@ def label(generated: str, target: str) -> str:
     if generated not in RHYMING_PART or target not in RHYMING_PART:
         return "oov"
     if RHYMING_PART[generated] == RHYMING_PART[target]:
-        return "rhyme"
+        # Identical onsets are rime riche, which English prosody treats as a
+        # failed rhyme rather than a rhyme (see prompt_set.shares_onset).
+        return "none" if shares_onset(generated, target) else "rhyme"
     gen_vowel = RHYMING_PART[generated].split()[0]
     tgt_vowel = RHYMING_PART[target].split()[0]
     if gen_vowel == tgt_vowel:
