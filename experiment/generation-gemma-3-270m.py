@@ -94,6 +94,12 @@ def generate_and_attribute(model, tokenizer, prompt_text: str, slug: str) -> Non
         graph = attribute(
             prompt=CHAT_PREFIX + prompt_at_step,
             model=model,
+            # Pin the attribution target to the token actually generated,
+            # instead of letting attribute() auto-select from the
+            # chat-prefixed context's own top logits (which frequently
+            # disagree with what raw greedy decoding chose -- see
+            # verify_attribution_target.py and action_plan.md).
+            attribution_targets=torch.tensor([token["token_id"]]),
             max_n_logits=max_n_logits,
             desired_logit_prob=desired_logit_prob,
             max_feature_nodes=max_feature_nodes,
