@@ -18,10 +18,10 @@ from circuit_tracer import ReplacementModel, attribute
 from circuit_tracer.transcoder.single_layer_transcoder import load_transcoder_set
 from circuit_tracer.utils import create_graph_files
 
-MODEL_NAME = "google/gemma-3-270m"
-TRANSCODER_REPO = "google/gemma-scope-2-270m-pt"
+MODEL_NAME = "google/gemma-3-270m-it"
+TRANSCODER_REPO = "google/gemma-scope-2-270m-it"
 NUM_LAYERS = 18
-OUTPUT_DIR = "./graphs/gemma-3-270m"
+OUTPUT_DIR = "./graphs/gemma-3-270m-it"
 PROMPT_SET_PATH = Path(__file__).parent.parent / "tools" / "prompt_set.json"
 
 WIDTH = "16k"
@@ -44,6 +44,9 @@ def load_prompt_set() -> list[dict]:
 def generate_and_attribute(model, tokenizer, prompt_text: str, slug: str) -> None:
     input_ids = tokenizer(prompt_text, return_tensors="pt")["input_ids"]
     STOP_IDS = {107, 108, tokenizer.eos_token_id}
+    end_of_turn_id = tokenizer.convert_tokens_to_ids("<end_of_turn>")
+    if isinstance(end_of_turn_id, int) and end_of_turn_id >= 0:
+        STOP_IDS.add(end_of_turn_id)
     token_trace = []
 
     for step in range(MAX_STEPS):
