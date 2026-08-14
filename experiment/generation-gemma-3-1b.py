@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
@@ -35,6 +36,13 @@ offload = "disk"
 verbose = True
 
 MAX_STEPS = 20
+
+# attribute() requires -it inputs to start with this exact 4-token prefix
+# (see replacement_model_transformerlens.py:389-399); those positions are
+# zeroed out of the transcoder activations before the graph is built, so
+# this has no effect on the graph itself. Generation is unaffected — it
+# never sees this prefix, only attribute() does.
+CHAT_PREFIX = "<bos><start_of_turn>user\n"
 
 
 def load_prompt_set() -> list[dict]:
@@ -84,7 +92,7 @@ def generate_and_attribute(model, tokenizer, prompt_text: str, slug: str) -> Non
         prompt_at_step = prompt_text + tokens_so_far
 
         graph = attribute(
-            prompt=prompt_at_step,
+            prompt=CHAT_PREFIX + prompt_at_step,
             model=model,
             max_n_logits=max_n_logits,
             desired_logit_prob=desired_logit_prob,
@@ -94,7 +102,8 @@ def generate_and_attribute(model, tokenizer, prompt_text: str, slug: str) -> Non
             verbose=verbose,
         )
 
-        step_slug = f"step-{i:02d}-{token['token_str'].strip().replace(' ', '_')}"
+        safe_token_str = re.sub(r'[\\/:*?"<>|]', "_", token["token_str"].strip())
+        step_slug = f"step-{i:02d}-{safe_token_str.replace(' ', '_')}"
         create_graph_files(
             graph_or_path=graph,
             slug=step_slug,
