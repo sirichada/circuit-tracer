@@ -87,17 +87,30 @@ def measure_downstream_effects_single_feature(
     }
 
 
+def candidate_layer_feat(candidate):
+    """(layer, feat) from either candidate shape.
+
+    Callers pass one of two dict layouts: flat {"layer", "feat"} (what
+    tracing.py builds, and what _serialize writes into the results JSON) or
+    {"feat_key": (layer, feat)} (the internal timeline representation). Reading
+    only one of them raises KeyError above the per-candidate try/except below,
+    which kills the whole intervention pass rather than skipping one feature.
+    """
+    if "feat_key" in candidate:
+        return candidate["feat_key"][0], candidate["feat_key"][1]
+    return candidate["layer"], candidate["feat"]
+
+
 def measure_downstream_effects_batch(model, prompt, candidates_list, suppression_step_key, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, max_candidates=None, measurement_prompt=None):
     """
     Measure downstream effects for multiple candidates.
     """
     results = []
     candidates_to_test = candidates_list[:max_candidates] if max_candidates else candidates_list
-    
+
     for i, candidate in enumerate(candidates_to_test):
-        layer = candidate["feat_key"][0]
-        feat = candidate["feat_key"][1]
-        
+        layer, feat = candidate_layer_feat(candidate)
+
         if suppression_step_key == 'peak_step':
             suppression_step = candidate['peak_step']
         elif suppression_step_key == 'first_step':
