@@ -84,6 +84,7 @@ experiment/graphs
 experiment/graphs.bak-*
 experiment/graphs *-*-*
 experiment/*.log.err
+diagnosis/
 .DS_Store
 ./github
 experiment/tracing
