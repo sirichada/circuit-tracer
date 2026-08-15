@@ -32,6 +32,10 @@ EXPERIMENT = Path(__file__).parent
 REPO = EXPERIMENT.parent
 PROMPT_SET_PATH = REPO / "tools" / "prompt_set.json"
 LABELS_PATH = EXPERIMENT / "rhyme_labels.json"
+# Per-prompt results live in their own directory rather than loose in
+# experiment/. Note .gitignore:90 already ignores `experiment/tracing`, so
+# these outputs are untracked by default -- intentional, they are regenerable.
+RESULTS_DIR = EXPERIMENT / "tracing"
 
 # --- analysis constants (identical across sizes; were duplicated per script) ---
 INFLUENCE_THRESHOLD = 0.001
@@ -59,7 +63,7 @@ class SizeConfig:
         return EXPERIMENT / "graphs" / f"gemma-3-{self.size}-it"
 
     def results_path(self, slug: str) -> Path:
-        return EXPERIMENT / f"circuit_tracing_results_{self.size}_{slug}.json"
+        return RESULTS_DIR / f"circuit_tracing_results_{self.size}_{slug}.json"
 
 
 CONFIGS = {
@@ -474,8 +478,10 @@ def run(cfg: SizeConfig, slugs: list[str] | None = None, interventions: bool = T
                 model, tokenizer, device, cfg, slug, label, prompt_set[slug], results
             )
 
-        cfg.results_path(slug).write_text(json.dumps(results, indent=2))
-        print(f"  wrote {cfg.results_path(slug).name}")
+        out = cfg.results_path(slug)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(results, indent=2))
+        print(f"  wrote {out.relative_to(EXPERIMENT)}")
 
 
 def main(size: str) -> None:

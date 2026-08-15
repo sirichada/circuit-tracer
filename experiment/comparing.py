@@ -36,6 +36,8 @@ EXPERIMENT = Path(__file__).parent
 REPO = EXPERIMENT.parent
 PROMPT_SET_PATH = REPO / "tools" / "prompt_set.json"
 LABELS_PATH = EXPERIMENT / "rhyme_labels.json"
+# Must match tracing.py's RESULTS_DIR.
+RESULTS_DIR = EXPERIMENT / "tracing"
 
 SIZES = ["270m", "1b", "4b"]
 TOP_N = 15
@@ -58,7 +60,7 @@ def load_all(sizes: list[str]) -> tuple[dict[tuple[str, str], dict], dict[str, i
     results: dict[tuple[str, str], dict] = {}
     for size in sizes:
         found = set()
-        for path in sorted(EXPERIMENT.glob(f"circuit_tracing_results_{size}_*.json")):
+        for path in sorted(RESULTS_DIR.glob(f"circuit_tracing_results_{size}_*.json")):
             slug = path.name[len(f"circuit_tracing_results_{size}_") : -len(".json")]
             if slug not in prompt_set:
                 print(f"  [{size}] {slug}: not in prompt_set.json -- skipping")
@@ -98,6 +100,10 @@ def spearman(x: list[float], y: list[float]) -> float:
     if len(x) < 3:
         return float("nan")
     rx, ry = _rank(x), _rank(y)
+    # A metric that is constant across prompts has zero rank variance; corrcoef
+    # would divide by zero and warn rather than just returning nan.
+    if rx.std() == 0 or ry.std() == 0:
+        return float("nan")
     return float(np.corrcoef(rx, ry)[0, 1])
 
 
@@ -425,7 +431,8 @@ def main() -> None:
     results, rhymes_all = load_all(sizes)
     if not results:
         raise SystemExit(
-            "no circuit_tracing_results_*.json found -- run experiment/tracing-*.py first"
+            f"no circuit_tracing_results_*.json in {RESULTS_DIR} -- "
+            "run experiment/tracing-*.py first"
         )
 
     section_coverage(results, sizes, args.labels)
