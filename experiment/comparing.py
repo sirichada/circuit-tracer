@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import numpy as np
+from scipy import stats
 
 EXPERIMENT = Path(__file__).parent
 REPO = EXPERIMENT.parent
@@ -91,45 +92,28 @@ def select(
 
 # ---------------------------------------------------------------- statistics
 #
-# scipy is not a declared dependency (pyproject.toml:7-26) and a slope plus a
-# rank correlation does not justify adding one, so both are computed here.
+# scipy.stats rather than hand-rolled: these numbers go in a paper, and a
+# reviewer should not have to audit our correlation code. Both wrappers exist
+# only to return nan quietly on degenerate input (n < 3, or a metric that is
+# constant across prompts) instead of raising or warning.
+
+NAN = float("nan")
 
 
-def spearman(x: list[float], y: list[float]) -> float:
-    """Rank correlation, averaging ranks over ties."""
-    if len(x) < 3:
-        return float("nan")
-    rx, ry = _rank(x), _rank(y)
-    # A metric that is constant across prompts has zero rank variance; corrcoef
-    # would divide by zero and warn rather than just returning nan.
-    if rx.std() == 0 or ry.std() == 0:
-        return float("nan")
-    return float(np.corrcoef(rx, ry)[0, 1])
-
-
-def _rank(values: list[float]) -> np.ndarray:
-    arr = np.asarray(values, dtype=float)
-    order = arr.argsort()
-    ranks = np.empty(len(arr), dtype=float)
-    ranks[order] = np.arange(len(arr), dtype=float)
-    # Average ranks within tied groups so ties do not create spurious ordering.
-    for value in np.unique(arr):
-        tied = arr == value
-        if tied.sum() > 1:
-            ranks[tied] = ranks[tied].mean()
-    return ranks
+def spearman(x: list[float], y: list[float]) -> tuple[float, float]:
+    """(rho, p) via scipy.stats.spearmanr; ties get averaged ranks."""
+    if len(x) < 3 or np.std(x) == 0 or np.std(y) == 0:
+        return NAN, NAN
+    result = stats.spearmanr(x, y)
+    return float(result.statistic), float(result.pvalue)
 
 
 def ols(x: list[float], y: list[float]) -> tuple[float, float, float]:
-    """(slope, intercept, r_squared) for a least-squares line."""
-    if len(x) < 3:
-        return float("nan"), float("nan"), float("nan")
-    xa, ya = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
-    if xa.std() == 0 or ya.std() == 0:
-        return float("nan"), float("nan"), float("nan")
-    slope, intercept = np.polyfit(xa, ya, 1)
-    r = np.corrcoef(xa, ya)[0, 1]
-    return float(slope), float(intercept), float(r**2)
+    """(slope, r_squared, p) via scipy.stats.linregress."""
+    if len(x) < 3 or np.std(x) == 0 or np.std(y) == 0:
+        return NAN, NAN, NAN
+    fit = stats.linregress(x, y)
+    return float(fit.slope), float(fit.rvalue**2), float(fit.pvalue)
 
 
 def mean(values: list[float]) -> float:
@@ -324,8 +308,9 @@ def section_suppression(results, sizes, labels) -> None:
 def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
     """The grid's design variable: does planning scale with rhyme availability?
 
-    Descriptive only. With n<=10 usable points per size these coefficients are
-    not powered for significance testing, and no p-values are reported.
+    Descriptive only. p-values come from scipy and are printed for
+    completeness, but n<=10 per size is underpowered and the three metrics x
+    three sizes are uncorrected for multiple comparisons.
     """
     print(f"\n{RULE}\nPLANNING VS RHYME AVAILABILITY (per size)\n{RULE}")
     print("Regressed on log10(rhymes_all). The `original` anchor has no")
@@ -362,11 +347,12 @@ def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
 
         for name, fn in metrics.items():
             ys = [fn(p) for _, p in fit_rows]
-            slope, _, r2 = ols(xs, ys)
-            rho = spearman(xs, ys)
+            slope, r2, p_lin = ols(xs, ys)
+            rho, p_rho = spearman(xs, ys)
             print(
                 f"  {name:14s} slope={slope:8.3f} per decade  "
-                f"r2={r2:5.3f}  spearman={rho:6.3f}  (n={len(ys)})"
+                f"r2={r2:5.3f} p={p_lin:5.3f}  "
+                f"spearman={rho:6.3f} p={p_rho:5.3f}  (n={len(ys)})"
             )
 
         print(f"  {'per prompt:':14s}")
@@ -377,7 +363,11 @@ def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
             vals = "  ".join(f"{n}={fn(p):7.2f}" for n, fn in metrics.items())
             print(f"    {slug:10s} {'anchor':>15s} {label_of(p):12s} {vals}")
         print()
-    print("Descriptive only -- n<=10 per size is not powered for significance testing.")
+    print(
+        "Descriptive only. p-values are shown for completeness but n<=10 per size\n"
+        "is underpowered, and three metrics x three sizes are uncorrected for\n"
+        "multiple comparisons -- do not read them as significance tests."
+    )
 
 
 def section_summary(results, sizes, labels) -> None:
