@@ -88,6 +88,7 @@ diagnosis/
 .DS_Store
 ./github
 experiment/tracing
+experiment/threshold
 experiment/logs
 
 # IPython
@@ -190,3 +191,5 @@ cython_debug/
 __pycache__/
 *.py[cod]
 *$py.class
+# Regenerable analysis artifact from experiment/comparing.py
+experiment/comparison.json

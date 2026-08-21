@@ -43,6 +43,12 @@ RESULTS_DIR = EXPERIMENT / "tracing"
 SIZES = ["270m", "1b", "4b"]
 TOP_N = 15
 RULE = "=" * 78
+# Headline suppression statistic. Both a mean over every candidate and a max
+# scale with the candidate count, which scales with continuation length, so
+# neither is comparable across prompts. Fixed-k fixes the draw; prompts with
+# fewer than k measured features are excluded and reported as such.
+FIXED_K = 10
+JSON_OUT = EXPERIMENT / "comparison.json"
 
 
 # ------------------------------------------------------------------- loading
@@ -267,45 +273,113 @@ def section_persistence(results, sizes, labels) -> None:
         print()
 
 
-def section_suppression(results, sizes, labels) -> None:
-    """Causal suppression, tolerating every shape run_interventions can emit."""
+def suppression_rows(payload: dict) -> list[dict] | None:
+    """Measured rows from one result file, or None if there are none.
+
+    Tolerates every shape `run_interventions` can emit: absent (analysis-only
+    run), `{"skipped": ...}`, or a full block.
+    """
+    iv = payload.get("interventions")
+    if not isinstance(iv, dict) or "results" not in iv:
+        return None
+    return iv["results"]
+
+
+def best_per_feature(rows: list[dict]) -> list[dict]:
+    """One row per (layer, feat): its strongest suppression across positions.
+
+    A feature is measured at up to two positions -- its `peak_step` and its
+    `first_step` -- so a top-k over raw rows could spend two of its k slots on
+    one feature, and a row count is not a feature count.
+    """
+    best: dict[tuple[int, int], dict] = {}
+    for r in rows:
+        key = (r["layer"], r["feat"])
+        if key not in best or r["logit_drop"] > best[key]["logit_drop"]:
+            best[key] = r
+    return list(best.values())
+
+
+def fixed_k(rows: list[dict], k: int = FIXED_K) -> float | None:
+    """Mean `logit_drop` over the top k features, or None if fewer than k.
+
+    `logit_drop` rather than `prob_drop`: probability cannot register an effect
+    once the target is already near zero, and `prob_drop` is bounded above by
+    `original_prob` (`methodology_evidence.md` §1).
+    """
+    top = sorted(best_per_feature(rows), key=lambda r: -r["logit_drop"])[:k]
+    return mean([r["logit_drop"] for r in top]) if len(top) == k else None
+
+
+def section_suppression(results, sizes, labels) -> dict:
     print(f"\n{RULE}\nSUPPRESSION EFFECTS\n{RULE}")
+    print(f"Headline statistic is mean logit_drop over the top {FIXED_K} measured")
+    print("features. Max and n are descriptive: both grow with candidate count.\n")
+    out: dict = {}
     for size in sizes:
         rows = select(results, size, labels)
         if not rows:
             print(f"\n{size}: no results")
             continue
         print(f"\n{size}:")
-        pooled_max: list[float] = []
+        per_size: dict = {}
+        pooled_k: list[float] = []
         for slug, p in rows:
-            iv = p.get("interventions")
-            if iv is None:
-                print(f"  {slug:10s} {label_of(p):12s} not run (--no-interventions)")
+            measured = suppression_rows(p)
+            if measured is None:
+                iv = p.get("interventions")
+                why = iv["skipped"] if isinstance(iv, dict) and "skipped" in iv else "not run"
+                print(f"  {slug:10s} {label_of(p):12s} {why}")
+                per_size[slug] = {"skipped": why}
                 continue
-            if "skipped" in iv:
-                print(f"  {slug:10s} {label_of(p):12s} skipped: {iv['skipped']}")
-                continue
-            for key in ("peak_step", "first_step"):
-                block = iv.get(key)
-                if not block or not block.get("results"):
+
+            entry: dict = {}
+            for pop in ("candidate", "superset", "near_miss", "random_control"):
+                sub = [r for r in measured if pop in r.get("populations", [])]
+                if not sub:
                     continue
-                drops = [r["prob_drop"] for r in block["results"]]
-                agg = block.get("summary", {}).get("aggregate", {})
-                best = max(block["results"], key=lambda r: r["prob_drop"])
-                if key == "peak_step":
-                    pooled_max.append(max(drops))
-                print(
-                    f"  {slug:10s} {label_of(p):12s} {key:10s} "
-                    f"n={block['n_measured']:3d} max={max(drops):.4f} "
-                    f"avg={agg.get('avg_prob_drop', mean(drops)):.4f} "
-                    f"pos={sum(1 for d in drops if d > 0):3d}  "
-                    f"top=L{best['layer']}F{best['feat']}"
-                )
-        if pooled_max:
-            print(f"  {'POOLED':10s} {'':12s} max prob_drop across prompts: {describe(pooled_max)}")
+                k = fixed_k(sub)
+                per_feat = best_per_feature(sub)
+                entry[pop] = {
+                    "n_features": len(per_feat),
+                    "n_rows": len(sub),
+                    f"mean_logit_drop_top{FIXED_K}": k,
+                    "max_logit_drop": max(r["logit_drop"] for r in per_feat),
+                    "mean_prob_drop": mean([r["prob_drop"] for r in per_feat]),
+                    "n_positive": sum(1 for r in per_feat if r["logit_drop"] > 0),
+                }
+            for key in ("peak_step", "first_step"):
+                sub = [r for r in measured if key in r.get("step_keys", [])]
+                if sub:
+                    entry[key] = {
+                        "n_features": len(best_per_feature(sub)),
+                        f"mean_logit_drop_top{FIXED_K}": fixed_k(sub),
+                    }
+
+            cand = entry.get("candidate", {})
+            ctrl = entry.get("random_control", {})
+            ck = cand.get(f"mean_logit_drop_top{FIXED_K}")
+            rk = ctrl.get(f"mean_logit_drop_top{FIXED_K}")
+            if ck is not None:
+                pooled_k.append(ck)
+            print(
+                f"  {slug:10s} {label_of(p):12s} "
+                f"cand n={cand.get('n_features', 0):4d} "
+                f"top{FIXED_K}={'  n/a' if ck is None else f'{ck:+6.3f}'}   "
+                f"ctrl n={ctrl.get('n_features', 0):4d} "
+                f"top{FIXED_K}={'  n/a' if rk is None else f'{rk:+6.3f}'}"
+            )
+            per_size[slug] = entry
+
+        if pooled_k:
+            print(
+                f"  {'POOLED':10s} {'':12s} candidate top{FIXED_K} logit drop: {describe(pooled_k)}"
+            )
+        out[size] = per_size
+    return out
 
 
-def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
+def section_rhyme_availability(results, sizes, rhymes_all, labels) -> dict:
     """The grid's design variable: does planning scale with rhyme availability?
 
     Descriptive only. p-values come from scipy and are printed for
@@ -330,6 +404,7 @@ def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
         ),
     }
 
+    fits: dict = {}
     for size in sizes:
         rows = select(results, size, labels)
         if not rows:
@@ -345,10 +420,20 @@ def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
             print("  too few points to fit\n")
             continue
 
+        fits[size] = {}
         for name, fn in metrics.items():
             ys = [fn(p) for _, p in fit_rows]
             slope, r2, p_lin = ols(xs, ys)
             rho, p_rho = spearman(xs, ys)
+            fits[size][name] = {
+                "n": len(ys),
+                "slope_per_decade": slope,
+                "r_squared": r2,
+                "p_linregress": p_lin,
+                "spearman_rho": rho,
+                "p_spearman": p_rho,
+                "per_prompt": {s: fn(p) for s, p in fit_rows},
+            }
             print(
                 f"  {name:14s} slope={slope:8.3f} per decade  "
                 f"r2={r2:5.3f} p={p_lin:5.3f}  "
@@ -368,13 +453,14 @@ def section_rhyme_availability(results, sizes, rhymes_all, labels) -> None:
         "is underpowered, and three metrics x three sizes are uncorrected for\n"
         "multiple comparisons -- do not read them as significance tests."
     )
+    return fits
 
 
 def section_summary(results, sizes, labels) -> None:
     print(f"\n{RULE}\nSUMMARY\n{RULE}")
     header = (
         f"{'Model':<8}{'Prompts':>8}{'Rhymes':>8}{'Unique':>9}"
-        f"{'Cands':>8}{'Spikes':>8}{'Plan %':>9}{'MaxDrop':>9}"
+        f"{'Cands':>8}{'Spikes':>8}{'Plan %':>9}{'Top10Lgt':>9}"
     )
     print(header)
     print("-" * len(header))
@@ -390,12 +476,16 @@ def section_summary(results, sizes, labels) -> None:
         execu = sum(p["statistics"]["n_execution_features"] for _, p in rows)
         plan_pct = 100 * plan / (plan + execu) if plan + execu else 0.0
 
-        drops = []
+        # Per-prompt top-k means, then described across prompts. Reporting
+        # max(max) instead let a single prompt stand in for a whole size.
+        ks = []
         for _, p in rows:
-            block = (p.get("interventions") or {}).get("peak_step")
-            if block and block.get("results"):
-                drops.append(max(r["prob_drop"] for r in block["results"]))
-        drop = f"{max(drops):.4f}" if drops else "--"
+            measured = suppression_rows(p)
+            if measured:
+                k = fixed_k([r for r in measured if "candidate" in r.get("populations", [])])
+                if k is not None:
+                    ks.append(k)
+        drop = f"{mean(ks):+.4f}" if ks else "--"
 
         print(
             f"{size:<8}{len(rows):>8}{n_rhyme:>8}{uniq:>9}"
@@ -431,9 +521,35 @@ def main() -> None:
     section_planning_execution(results, sizes, args.labels)
     section_bands(results, sizes, args.labels)
     section_persistence(results, sizes, args.labels)
-    section_suppression(results, sizes, args.labels)
-    section_rhyme_availability(results, sizes, rhymes_all, args.labels)
+    suppression = section_suppression(results, sizes, args.labels)
+    fits = section_rhyme_availability(results, sizes, rhymes_all, args.labels)
     section_summary(results, sizes, args.labels)
+
+    # Everything above also goes to disk. Stdout alone left no artifact to diff
+    # between runs or to cite a number from without re-running the whole stage.
+    dump = {
+        "sizes": sizes,
+        "labels_filter": args.labels,
+        "fixed_k": FIXED_K,
+        "rhymes_all": rhymes_all,
+        "provenance": {
+            f"{sz}/{slug}": p.get("provenance") for (sz, slug), p in sorted(results.items())
+        },
+        "per_prompt": {
+            f"{sz}/{slug}": {
+                "rhyme_label": label_of(p),
+                "config": p["config"],
+                "statistics": p["statistics"],
+                "population_counts": p.get("population_counts"),
+                "position_diagnostics": p.get("position_diagnostics"),
+            }
+            for (sz, slug), p in sorted(results.items())
+        },
+        "suppression": suppression,
+        "rhyme_availability_fits": fits,
+    }
+    JSON_OUT.write_text(json.dumps(dump, indent=2, default=str))
+    print(f"\nwrote {JSON_OUT}")
 
 
 if __name__ == "__main__":

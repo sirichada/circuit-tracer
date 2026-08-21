@@ -1,225 +1,256 @@
+"""Suppression measurement: what happens to P(rhyme token) when a feature is zeroed.
+
+Two-phase by design.
+
+  * `measure_features()` is the cheap phase -- one forward pass per feature, no
+    generation. The unsuppressed baseline is computed **once** and reused, since
+    it does not depend on which feature is being suppressed.
+  * `generate_for()` is the expensive phase -- ~20 sequential forwards per call.
+    It runs only for the subset selected from phase one's ranking.
+
+Splitting them is a correctness fix as much as a performance one. When the two
+shared a `try` block, an OOM inside generation discarded the already-computed
+probability/rank/entropy row for that feature: the append never ran. Each phase
+now has its own error isolation, so a generation failure costs a generation.
+
+Positions, not steps
+--------------------
+`position` in every row here is a **token index into the measurement sequence**,
+which is what `_get_feature_intervention_hooks` indexes with. It is *not* a
+generation step number. `tracing.step_contexts()` does the conversion; nothing
+in this module infers a position.
+
+Logits, not just probabilities
+------------------------------
+Rows carry `original_logit` / `suppressed_logit` for the rhyme token alongside
+the full-vocabulary `logsumexp` of each pass. Probabilities alone cannot express
+the cross-pass contrast -- the normaliser differs between the two passes -- and
+`prob_drop` is bounded above by `original_prob`, so it saturates exactly where
+the rhyme is already unlikely. See `methodology_evidence.md` §1 (Zhang & Nanda).
+"""
+
+from __future__ import annotations
+
 import torch
 import torch.nn.functional as F
-from collections import defaultdict
-import json  # Fixed: Added missing import
 
-def measure_downstream_effects_single_feature(
-    model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, measurement_prompt=None 
-):
-    measurement_prompt = measurement_prompt or prompt
-    inputs = model.tokenizer(measurement_prompt, return_tensors="pt").to(device)
-
-    rhyme_token_id = tokenizer.encode(RHYME_TOKEN, add_special_tokens=False)[0]
-    input_ids = inputs["input_ids"]  # shape [1, seq_len] — keep as 2D
-
-    tl_model = model  # ReplacementModel IS the HookedTransformer
-
-    # Baseline logits
-    with torch.no_grad():
-        logits_full = tl_model(input_ids)        # [1, seq, vocab]
-        logits_original = logits_full[0, -1, :].unsqueeze(0)  # [1, vocab]
-    probs_original = F.softmax(logits_original, dim=-1)
-
-    # Confirm text change
-    intervention = [(layer, suppression_step, feat, 0.0)]
-    hook_result = model._get_feature_intervention_hooks(input_ids, intervention)
-    hooks = hook_result[0]
-
-    with torch.no_grad():
-        logits_full_sup = model.run_with_hooks(
-            input_ids,
-            fwd_hooks=hooks
-        )
-        logits_suppressed = logits_full_sup[0, -1, :].unsqueeze(0)
-    probs_suppressed = F.softmax(logits_suppressed, dim=-1)
-
-    # Confirm text change (reuse same intervention)
-    generated_suppressed = model.feature_intervention_generate(
-        prompt, intervention, max_new_tokens=max_new_tokens, do_sample=False
-    )[0]
-
-    # Probability and Rank Analysis
-    original_prob = probs_original[0, rhyme_token_id].item()
-    suppressed_prob = probs_suppressed[0, rhyme_token_id].item()
-    prob_drop = original_prob - suppressed_prob
-
-    original_sorted_probs, original_sorted_indices = torch.sort(probs_original[0], descending=True)
-    original_rank = (original_sorted_indices == rhyme_token_id).nonzero(as_tuple=True)[0].item()
-
-    suppressed_sorted_probs, suppressed_sorted_indices = torch.sort(probs_suppressed[0], descending=True)
-    suppressed_rank = (suppressed_sorted_indices == rhyme_token_id).nonzero(as_tuple=True)[0].item()
-
-    rank_shift = original_rank - suppressed_rank
-
-    # Top Token Decoding
-    original_top5_indices = original_sorted_indices[:5].tolist()
-    original_top5_tokens = [tokenizer.decode([idx]) for idx in original_top5_indices]
-    original_top5_probs = original_sorted_probs[:5].tolist()
-
-    suppressed_top5_indices = suppressed_sorted_indices[:5].tolist()
-    suppressed_top5_tokens = [tokenizer.decode([idx]) for idx in suppressed_top5_indices]
-    suppressed_top5_probs = suppressed_sorted_probs[:5].tolist()
-
-    # Entropy Calculations
-    original_entropy = -(probs_original[0] * torch.log(probs_original[0] + 1e-10)).sum().item()
-    suppressed_entropy = -(probs_suppressed[0] * torch.log(probs_suppressed[0] + 1e-10)).sum().item()
-    entropy_increase = suppressed_entropy - original_entropy
-
-    return {
-        "layer": layer,
-        "feat": feat,
-        "suppression_step": suppression_step,
-        "original_prob": original_prob,
-        "suppressed_prob": suppressed_prob,
-        "prob_drop": prob_drop,
-        "prob_drop_pct": 100 * prob_drop / original_prob if original_prob > 0 else 0,
-        "original_rank": original_rank,
-        "suppressed_rank": suppressed_rank,
-        "rank_shift": rank_shift,
-        "original_top5_tokens": original_top5_tokens,
-        "original_top5_probs": original_top5_probs,
-        "suppressed_top5_tokens": suppressed_top5_tokens,
-        "suppressed_top5_probs": suppressed_top5_probs,
-        "original_entropy": original_entropy,
-        "suppressed_entropy": suppressed_entropy,
-        "entropy_increase": entropy_increase,
-        "generated_suppressed": generated_suppressed,
-    }
+TOP_K_RECORDED = 10
 
 
-def candidate_layer_feat(candidate):
+def candidate_layer_feat(candidate: dict) -> tuple[int, int]:
     """(layer, feat) from either candidate shape.
 
-    Callers pass one of two dict layouts: flat {"layer", "feat"} (what
-    tracing.py builds, and what _serialize writes into the results JSON) or
-    {"feat_key": (layer, feat)} (the internal timeline representation). Reading
-    only one of them raises KeyError above the per-candidate try/except below,
-    which kills the whole intervention pass rather than skipping one feature.
+    Callers pass one of two dict layouts: flat {"layer", "feat"} (what tracing.py
+    builds, and what it writes into the results JSON) or {"feat_key": (layer,
+    feat)} (the internal timeline representation). Reading only one of them
+    raises KeyError above the per-candidate try/except, which kills a whole
+    intervention pass rather than skipping one feature.
     """
     if "feat_key" in candidate:
-        return candidate["feat_key"][0], candidate["feat_key"][1]
-    return candidate["layer"], candidate["feat"]
+        return int(candidate["feat_key"][0]), int(candidate["feat_key"][1])
+    return int(candidate["layer"]), int(candidate["feat"])
 
 
-def measure_downstream_effects_batch(model, prompt, candidates_list, suppression_step_key, device, tokenizer, RHYME_TOKEN, max_new_tokens=20, max_candidates=None, measurement_prompt=None):
+def rhyme_token_id(tokenizer, rhyme_token: str) -> int:
+    ids = tokenizer.encode(rhyme_token, add_special_tokens=False)
+    if len(ids) != 1:
+        raise ValueError(
+            f"rhyme token {rhyme_token!r} encodes to {len(ids)} tokens {ids}; "
+            "single-token rhymes only -- callers must check label['single_token']"
+        )
+    return int(ids[0])
+
+
+def _summarize_pass(logits_1d: torch.Tensor, token_id: int) -> dict:
+    """Everything read off one next-token logit vector.
+
+    `logsumexp` is taken over the **full vocabulary**, before any top-k slice.
+    Computed over the top-k slice instead it would not be the softmax
+    denominator, and `exp(logit - logsumexp)` would silently disagree with the
+    `prob` stored beside it.
     """
-    Measure downstream effects for multiple candidates.
-    """
-    results = []
-    candidates_to_test = candidates_list[:max_candidates] if max_candidates else candidates_list
+    logits = logits_1d.float()
+    lse = torch.logsumexp(logits, dim=-1)
+    probs = F.softmax(logits, dim=-1)
 
-    for i, candidate in enumerate(candidates_to_test):
-        layer, feat = candidate_layer_feat(candidate)
+    sorted_probs, sorted_idx = torch.sort(probs, descending=True)
+    rank = int((sorted_idx == token_id).nonzero(as_tuple=True)[0].item())
 
-        if suppression_step_key == 'peak_step':
-            suppression_step = candidate['peak_step']
-        elif suppression_step_key == 'first_step':
-            suppression_step = candidate['first_step']
-        else:
-            suppression_step = suppression_step_key
-        
-        try:
-            effect = measure_downstream_effects_single_feature(
-                model, prompt, layer, feat, suppression_step, device, tokenizer, RHYME_TOKEN, max_new_tokens, measurement_prompt=measurement_prompt
-            )
-            results.append(effect)
-            
-            if (i + 1) % 10 == 0:
-                print(f"  Processed {i + 1} / {len(candidates_to_test)} candidates")
-        
-        except Exception as e:
-            # Fixed: Provide more detail on errors during batch processing
-            print(f"  Error processing L{layer} F{feat}: {type(e).__name__} - {e}")
-            continue
-    
-    return results
-
-
-def analyze_downstream_effects(results, top_n=20):
-    """
-    Analyze results. Returns a safe dictionary even if results are empty.
-    """
-    if not results:
-        print("No results to analyze.")
-        # Fixed: Return a default structure so subscripting doesn't crash the main script
-        return {
-            'sorted_by_prob_drop': [],
-            'sorted_by_rank_shift': [],
-            'sorted_by_entropy_increase': [],
-            'aggregate': {
-                'avg_prob_drop': 0, 'avg_prob_drop_pct': 0, 
-                'avg_rank_shift': 0, 'avg_entropy_increase': 0, 
-                'broken_rhyme_count': 0
-            }
-        }
-    
-    sorted_by_prob_drop = sorted(results, key=lambda x: -x['prob_drop'])
-    sorted_by_rank_shift = sorted(results, key=lambda x: -x['rank_shift'])
-    sorted_by_entropy_increase = sorted(results, key=lambda x: -x['entropy_increase'])
-    
-    # (Print statements omitted for brevity, keeping existing logic)
-    
-    avg_prob_drop = sum(r['prob_drop'] for r in results) / len(results)
-    avg_prob_drop_pct = sum(r['prob_drop_pct'] for r in results) / len(results)
-    avg_rank_shift = sum(r['rank_shift'] for r in results) / len(results)
-    avg_entropy_increase = sum(r['entropy_increase'] for r in results) / len(results)
-    broken_rhyme = sum(1 for r in results if r['suppressed_rank'] > 100)
-    
+    top_idx = sorted_idx[:TOP_K_RECORDED]
     return {
-        'sorted_by_prob_drop': sorted_by_prob_drop,
-        'sorted_by_rank_shift': sorted_by_rank_shift,
-        'sorted_by_entropy_increase': sorted_by_entropy_increase,
-        'aggregate': {
-            'avg_prob_drop': avg_prob_drop,
-            'avg_prob_drop_pct': avg_prob_drop_pct,
-            'avg_rank_shift': avg_rank_shift,
-            'avg_entropy_increase': avg_entropy_increase,
-            'broken_rhyme_count': broken_rhyme,
-        }
+        "logit": float(logits[token_id].item()),
+        "logsumexp": float(lse.item()),
+        "prob": float(probs[token_id].item()),
+        "rank": rank,
+        "entropy": float(-(probs * torch.log(probs + 1e-10)).sum().item()),
+        "top_ids": [int(i) for i in top_idx.tolist()],
+        "top_logits": [float(v) for v in logits[top_idx].tolist()],
+        "top_probs": [float(v) for v in sorted_probs[:TOP_K_RECORDED].tolist()],
     }
 
 
-def save_downstream_effects_to_json(results, analyzed, output_filename):
-    """
-    Save downstream effects results to JSON.
-    """
-    # Defensive check for analyzed dictionary structure
-    top_drop = analyzed.get('sorted_by_prob_drop', [])
-    top_rank = analyzed.get('sorted_by_rank_shift', [])
-    top_entropy = analyzed.get('sorted_by_entropy_increase', [])
+def compute_baseline(model, tokens: torch.Tensor, token_id: int) -> dict:
+    """Unsuppressed next-token distribution for the measurement sequence.
 
-    output = {
-        "downstream_effects": results,
-        "analysis": {
-            "top_by_prob_drop": [
+    Hoisted out of the per-feature loop: it is identical for every feature, and
+    was previously recomputed once per candidate.
+    """
+    input_ids = tokens.unsqueeze(0)
+    with torch.no_grad():
+        logits = model(input_ids)[0, -1, :]
+    return _summarize_pass(logits, token_id)
+
+
+def measure_features(
+    model,
+    tokens: torch.Tensor,
+    baseline: dict,
+    rows: list[dict],
+    token_id: int,
+    progress_every: int = 25,
+) -> tuple[list[dict], list[dict]]:
+    """Phase one. Suppress each row's feature at its own position; read the effect.
+
+    `rows` carry `layer`, `feat`, `position`, and whatever provenance the caller
+    wants echoed back (`populations`, `step_keys`, ...). Returns
+    (measured, failures) -- failures are recorded rather than dropped, so a
+    shortfall in coverage has a stated cause instead of being invisible.
+    """
+    input_ids = tokens.unsqueeze(0)
+    n_pos = int(tokens.shape[0])
+
+    measured: list[dict] = []
+    failures: list[dict] = []
+
+    for i, row in enumerate(rows):
+        layer, feat = candidate_layer_feat(row)
+        position = int(row["position"])
+
+        # Raise, do not log: the per-feature except below would otherwise absorb
+        # an out-of-range position into a silently dropped row. A position past
+        # the end of the measurement sequence is a bug in position derivation,
+        # not a feature that happens not to work.
+        if not 0 <= position < n_pos:
+            raise IndexError(
+                f"suppression position {position} outside measurement sequence "
+                f"of length {n_pos} (L{layer} F{feat}). Positions must be derived "
+                "from tracing.step_contexts() against this same prompt."
+            )
+
+        try:
+            hooks = model._get_feature_intervention_hooks(
+                input_ids, [(layer, position, feat, 0.0)]
+            )[0]
+            with torch.no_grad():
+                logits = model.run_with_hooks(input_ids, fwd_hooks=hooks)[0, -1, :]
+            sup = _summarize_pass(logits, token_id)
+        except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+            failures.append(
                 {
-                    "layer": r["layer"], "feat": r["feat"],
-                    "suppression_step": r["suppression_step"],
-                    "prob_drop": float(r["prob_drop"]),
-                    "prob_drop_pct": float(r["prob_drop_pct"]),
-                    "rank_shift": int(r["rank_shift"]),
-                } for r in top_drop[:50]
-            ],
-            "top_by_rank_shift": [
-                {
-                    "layer": r["layer"], "feat": r["feat"],
-                    "suppression_step": r["suppression_step"],
-                    "rank_shift": int(r["rank_shift"]),
-                    "prob_drop_pct": float(r["prob_drop_pct"]),
-                } for r in top_rank[:50]
-            ],
-            "top_by_entropy_increase": [
-                {
-                    "layer": r["layer"], "feat": r["feat"],
-                    "suppression_step": r["suppression_step"],
-                    "entropy_increase": float(r["entropy_increase"]),
-                    "prob_drop_pct": float(r["prob_drop_pct"]),
-                } for r in top_entropy[:50]
-            ],
-            "aggregate_stats": analyzed.get("aggregate", {}),
+                    "layer": layer,
+                    "feat": feat,
+                    "position": position,
+                    "cause": "measurement_error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            print(f"  measurement failed L{layer} F{feat} @pos{position}: {type(exc).__name__}")
+            continue
+
+        out = dict(row)
+        out.update(
+            {
+                "layer": layer,
+                "feat": feat,
+                "position": position,
+                "original_logit": baseline["logit"],
+                "suppressed_logit": sup["logit"],
+                "logit_drop": baseline["logit"] - sup["logit"],
+                "original_logsumexp": baseline["logsumexp"],
+                "suppressed_logsumexp": sup["logsumexp"],
+                "original_prob": baseline["prob"],
+                "suppressed_prob": sup["prob"],
+                "prob_drop": baseline["prob"] - sup["prob"],
+                "prob_drop_pct": (
+                    100 * (baseline["prob"] - sup["prob"]) / baseline["prob"]
+                    if baseline["prob"] > 0
+                    else 0.0
+                ),
+                "original_rank": baseline["rank"],
+                "suppressed_rank": sup["rank"],
+                "rank_shift": baseline["rank"] - sup["rank"],
+                "original_entropy": baseline["entropy"],
+                "suppressed_entropy": sup["entropy"],
+                "entropy_increase": sup["entropy"] - baseline["entropy"],
+                "original_top": {
+                    "ids": baseline["top_ids"],
+                    "logits": baseline["top_logits"],
+                    "probs": baseline["top_probs"],
+                },
+                "suppressed_top": {
+                    "ids": sup["top_ids"],
+                    "logits": sup["top_logits"],
+                    "probs": sup["top_probs"],
+                },
+            }
+        )
+        measured.append(out)
+
+        if progress_every and (i + 1) % progress_every == 0:
+            print(f"  measured {i + 1} / {len(rows)}")
+
+    return measured, failures
+
+
+def generate_for(model, context_prompt, interventions, max_new_tokens: int = 20) -> str | None:
+    """Phase two. One greedy continuation, isolated from phase one's errors.
+
+    `context_prompt` must be the step context the feature's position indexes
+    into -- integer positions do not survive into generated tokens
+    (`_convert_open_ended_interventions`), so generating from a shorter prompt
+    would put the position out of range.
+    """
+    try:
+        return model.feature_intervention_generate(
+            context_prompt, interventions, max_new_tokens=max_new_tokens, do_sample=False
+        )[0]
+    except Exception as exc:  # noqa: BLE001
+        print(f"  generation failed ({type(exc).__name__}: {exc})")
+        return None
+
+
+def analyze_downstream_effects(results: list[dict]) -> dict:
+    """Rankings and aggregate stats. Safe on an empty list."""
+    if not results:
+        return {
+            "sorted_by_logit_drop": [],
+            "sorted_by_prob_drop": [],
+            "sorted_by_rank_shift": [],
+            "sorted_by_entropy_increase": [],
+            "aggregate": {
+                "n": 0,
+                "avg_logit_drop": None,
+                "avg_prob_drop": None,
+                "avg_prob_drop_pct": None,
+                "avg_rank_shift": None,
+                "avg_entropy_increase": None,
+                "broken_rhyme_count": 0,
+            },
         }
+
+    n = len(results)
+    return {
+        "sorted_by_logit_drop": sorted(results, key=lambda x: -x["logit_drop"]),
+        "sorted_by_prob_drop": sorted(results, key=lambda x: -x["prob_drop"]),
+        "sorted_by_rank_shift": sorted(results, key=lambda x: -x["rank_shift"]),
+        "sorted_by_entropy_increase": sorted(results, key=lambda x: -x["entropy_increase"]),
+        "aggregate": {
+            "n": n,
+            "avg_logit_drop": sum(r["logit_drop"] for r in results) / n,
+            "avg_prob_drop": sum(r["prob_drop"] for r in results) / n,
+            "avg_prob_drop_pct": sum(r["prob_drop_pct"] for r in results) / n,
+            "avg_rank_shift": sum(r["rank_shift"] for r in results) / n,
+            "avg_entropy_increase": sum(r["entropy_increase"] for r in results) / n,
+            "broken_rhyme_count": sum(1 for r in results if r["suppressed_rank"] > 100),
+        },
     }
-    
-    with open(output_filename, "w") as f:
-        json.dump(output, f, indent=2)
-    print(f"\nDownstream effects saved to {output_filename}")
