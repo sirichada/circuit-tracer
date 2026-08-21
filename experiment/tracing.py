@@ -785,8 +785,23 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
 # ------------------------------------------------------------------ model half
 
 
-def load_model(cfg: SizeConfig):
-    """Load the -it model and its matching Gemma-Scope-2 transcoders."""
+def load_model(cfg: SizeConfig, dtype=None):
+    """Load the -it model and its matching Gemma-Scope-2 transcoders.
+
+    **Defaults to float32, not bf16, and that is a measurement decision.**
+    bf16 carries 8 significand bits, so near a target logit of ~27 the
+    representable spacing is 2**4 * 2**-7 = 0.125. Every logit the measurement
+    reads is therefore a multiple of 0.125, and `logit_drop` inherits that grid.
+    On the first real run (270M/`inspire`) this censored the result: 69 of 78
+    candidates came back at *exactly* 0.0, which does not mean "no effect" but
+    "smaller than the numerical resolution". A mean over a column that is 88%
+    hard zeros is measuring rounding.
+
+    fp32 costs ~2x memory for the same model. 270M and 1B fit comfortably; 4B in
+    fp32 needs ~16GB of weights and wants the H100 rather than a 12GB card. Pass
+    `--dtype bfloat16` to opt back out, but treat any `logit_drop` quantised to
+    0.125 as a lower bound rather than a measurement.
+    """
     import torch
     from huggingface_hub import hf_hub_download
     from transformers import AutoTokenizer
@@ -794,6 +809,7 @@ def load_model(cfg: SizeConfig):
     from circuit_tracer import ReplacementModel
     from circuit_tracer.transcoder.single_layer_transcoder import load_transcoder_set
 
+    dtype = torch.float32 if dtype is None else dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     paths = {
         layer: hf_hub_download(
@@ -817,13 +833,13 @@ def load_model(cfg: SizeConfig):
         model_name=cfg.model_name,
         transcoders=transcoders,
         backend="transformerlens",
-        dtype=torch.bfloat16,
+        dtype=dtype,
         device=device,
     )
     return model, tokenizer, device
 
 
-def provenance(device) -> dict:
+def provenance(device, model_dtype=None) -> dict:
     """Hardware and library versions, written into every results file.
 
     bf16 carries ~8 mantissa bits and different GPU architectures select
@@ -839,6 +855,10 @@ def provenance(device) -> dict:
         "cuda": torch.version.cuda,
         "device": str(device),
         "seed": RANDOM_SEED,
+        # Recorded because it sets the resolution of every logit_drop in the
+        # file: bf16 quantises to 0.125 near the target logit, fp32 does not.
+        # Results measured at different dtypes must not be pooled.
+        "dtype": str(getattr(model_dtype, "dtype", model_dtype)),
     }
     if torch.cuda.is_available():
         info["gpu"] = torch.cuda.get_device_name()
@@ -861,7 +881,7 @@ def run_interventions(model, tokenizer, device, cfg, slug, label, results) -> di
         rhyme_token_id,
     )
 
-    results["provenance"] = provenance(device)
+    results["provenance"] = provenance(device, getattr(model, "cfg", None))
 
     if not label["single_token"]:
         print(
@@ -975,7 +995,12 @@ def run_interventions(model, tokenizer, device, cfg, slug, label, results) -> di
 # ------------------------------------------------------------------------ entry
 
 
-def run(cfg: SizeConfig, slugs: list[str] | None = None, interventions: bool = True) -> None:
+def run(
+    cfg: SizeConfig,
+    slugs: list[str] | None = None,
+    interventions: bool = True,
+    dtype_name: str = "float32",
+) -> None:
     if not LABELS_PATH.exists():
         raise SystemExit(f"{LABELS_PATH} missing -- run `python experiment/rhyme_labels.py` first")
 
@@ -1002,13 +1027,21 @@ def run(cfg: SizeConfig, slugs: list[str] | None = None, interventions: bool = T
 
         if interventions:
             if model is None:
-                model, tokenizer, device = load_model(cfg)
+                import torch
+
+                model, tokenizer, device = load_model(
+                    cfg, dtype=getattr(torch, dtype_name)
+                )
             results = run_interventions(model, tokenizer, device, cfg, slug, label, results)
 
         out = cfg.results_path(slug)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(results, indent=2))
-        print(f"  wrote {out.relative_to(EXPERIMENT)}")
+        try:
+            shown = out.relative_to(EXPERIMENT)
+        except ValueError:  # RESULTS_DIR overridden outside EXPERIMENT (or relative)
+            shown = out
+        print(f"  wrote {shown}")
 
 
 def main(size: str) -> None:
@@ -1019,6 +1052,21 @@ def main(size: str) -> None:
     ap.add_argument(
         "--no-interventions", action="store_true", help="run the GPU-free analysis half only"
     )
+    ap.add_argument(
+        "--dtype",
+        default="float32",
+        choices=("float32", "bfloat16"),
+        help=(
+            "measurement precision (default float32). bf16 quantises logits to a "
+            "0.125 grid at these magnitudes, which rounds most per-feature "
+            "suppression effects to exactly 0 -- see load_model's docstring."
+        ),
+    )
     args = ap.parse_args()
 
-    run(CONFIGS[size], slugs=args.slugs, interventions=not args.no_interventions)
+    run(
+        CONFIGS[size],
+        slugs=args.slugs,
+        interventions=not args.no_interventions,
+        dtype_name=args.dtype,
+    )
