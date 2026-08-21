@@ -143,13 +143,14 @@ def run_sweep(
     contexts: dict[int, dict],
     rhyme_step: int,
     measured: Measurements,
+    n_layers: int,
 ) -> list[dict]:
     """One row per (influence, percentile, sustain) cell."""
     rows = []
     for influence in INFLUENCE_GRID:
         step_features, step_total = filter_at(step_nodes, influence)
         timeline, percentiles = build_timeline(step_features, step_total)
-        stats = feature_stats(timeline, percentiles, rhyme_step)
+        stats = feature_stats(timeline, percentiles, rhyme_step, n_layers)
         rhyme_step_features = {(r["layer"], r["feat"]) for r in step_features.get(rhyme_step, [])}
 
         for min_pct in PERCENTILE_GRID:
@@ -358,14 +359,17 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
             "sweep reports candidate counts only"
         )
 
-    sweep = run_sweep(step_nodes, contexts, rhyme_step, measured)
+    # `n_layers` must match what tracing.py measured against: the sweep recomputes
+    # candidates at every floor, so admitting last-layer features here would
+    # invent cells that the GPU pass never measured and inflate `not_measured`.
+    sweep = run_sweep(step_nodes, contexts, rhyme_step, measured, cfg.n_layers)
 
     # Populations are defined at the shipped influence threshold; the sweep above
     # is what varies it. Mixing the two would make near-miss membership depend on
     # a value that is itself under test.
     step_features, step_total = filter_at(step_nodes, INFLUENCE_THRESHOLD)
     timeline, percentiles = build_timeline(step_features, step_total)
-    stats = feature_stats(timeline, percentiles, rhyme_step)
+    stats = feature_stats(timeline, percentiles, rhyme_step, cfg.n_layers)
     rhyme_step_features = {(r["layer"], r["feat"]) for r in step_features.get(rhyme_step, [])}
     pops = split_populations(stats, rhyme_step_features, rhyme_step)
     control_selected = sample_matched_control(pops["candidates"], pops["rest"], RANDOM_SEED)

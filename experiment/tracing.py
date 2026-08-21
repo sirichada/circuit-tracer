@@ -289,10 +289,34 @@ def collect_ctx_idx(step_features: dict) -> dict[tuple, dict[int, int]]:
     return dict(out)
 
 
-def feature_stats(timeline: dict, percentiles: dict, rhyme_step: int) -> list[dict]:
+def feature_stats(timeline: dict, percentiles: dict, rhyme_step: int, n_layers: int) -> list[dict]:
+    """Per-feature timing/influence summaries, over the *measurable* features only.
+
+    Features in the final layer are dropped. Attention precedes the MLP within a
+    block, so `blocks.{n_layers-1}.hook_mlp_out` is followed only by `ln_final`
+    and the unembed -- no attention layer remains, so nothing crosses positions
+    after it. Suppressing such a feature at any position before the readout gives
+    bit-identical logits *by construction*, and the pipeline used to report those
+    structural zeros as measured nulls. Measured on 270M/`inspire`: layer 17 was
+    128/128 exact-zero `logit_drop`, layer 16 was 0/95, layer 15 was 0/7. See
+    `methodology_evidence.md` section 9 for the full account.
+
+    This restricts which features we make *causal* claims about. It deliberately
+    does **not** touch `build_timeline`/`filter_at`, so `rhyme_val` and
+    `rhyme_percentile` keep their existing denominators (all graph nodes at that
+    step). Last-layer features really do participate in the attribution graph;
+    conflating that description with the measurement's hypothesis space would be
+    the same category error this filter exists to fix.
+
+    `n_layers` is **required on purpose**. A default would let a future call site
+    silently re-admit unmeasurable features; a required argument forces every
+    caller to be reviewed.
+    """
     stats = []
     for key, step_inf in timeline.items():
         if not step_inf:
+            continue
+        if key[0] >= n_layers - 1:  # no attention remains after this MLP
             continue
         steps_sorted = sorted(step_inf)
         peak_val = max(step_inf.values())
@@ -524,6 +548,7 @@ def build_measurement_set(
     contexts: dict[int, dict],
     ctx_idx_by_key: dict[tuple, dict[int, int]],
     rhyme_step: int,
+    n_layers: int,
 ) -> tuple[list[dict], dict]:
     """One deduplicated row per (layer, feat, position) across every population.
 
@@ -594,6 +619,17 @@ def build_measurement_set(
             f"L{r['layer']} F{r['feat']} step {r['step']} -> position {r['position']} "
             f">= measurement length {rhyme_ntok}"
         )
+        # Defence in depth, and a *different* check from the two above: those catch
+        # a position defect, this catches a population built from a stats list that
+        # never went through `feature_stats`' layer filter. Such a row would measure
+        # a guaranteed zero and pool it as a null. See methodology_evidence.md s9.
+        if r["layer"] >= n_layers - 1:
+            raise RuntimeError(
+                f"L{r['layer']} F{r['feat']} is in the final layer (n_layers={n_layers}) "
+                f"at position {r['position']}, which has no causal path to the readout. "
+                "Its suppression is bit-identical to baseline by construction. Some "
+                "population was built without feature_stats' layer filter."
+            )
 
     diagnostics = {
         "n_rows": len(ordered),
@@ -623,8 +659,10 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
     step_features, step_total = filter_at(step_nodes, INFLUENCE_THRESHOLD)
 
     timeline, percentiles = build_timeline(step_features, step_total)
+    # Counted before the filter so the exclusion is reported, never silent.
+    n_excluded_last_layer = sum(1 for k in timeline if k[0] >= cfg.n_layers - 1)
     ctx_idx_by_key = collect_ctx_idx(step_features)
-    stats = feature_stats(timeline, percentiles, rhyme_step)
+    stats = feature_stats(timeline, percentiles, rhyme_step, cfg.n_layers)
     stats_by_key = {s["feat_key"]: s for s in stats}
 
     planning = sorted(
@@ -649,7 +687,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
     # strict containment either way.
     loose_features, loose_total = filter_at(step_nodes, min(INFLUENCE_GRID))
     loose_timeline, loose_percentiles = build_timeline(loose_features, loose_total)
-    loose_stats = feature_stats(loose_timeline, loose_percentiles, rhyme_step)
+    loose_stats = feature_stats(loose_timeline, loose_percentiles, rhyme_step, cfg.n_layers)
     loose_rhyme_feats = {(r["layer"], r["feat"]) for r in loose_features.get(rhyme_step, [])}
     superset = candidate_keys(
         loose_stats, loose_rhyme_feats, rhyme_step, min(PERCENTILE_GRID), min(SUSTAIN_GRID)
@@ -678,7 +716,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             )
 
     measurement_rows, position_diagnostics = build_measurement_set(
-        measurement_populations, contexts, ctx_idx_by_key, rhyme_step
+        measurement_populations, contexts, ctx_idx_by_key, rhyme_step, cfg.n_layers
     )
 
     if verbose:
@@ -694,6 +732,10 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             "  populations: "
             + "  ".join(f"{k}={len(v)}" for k, v in measurement_populations.items())
             + f"  -> {len(measurement_rows)} unique (layer,feat,position) rows"
+        )
+        print(
+            f"  excluded {n_excluded_last_layer} last-layer (L{cfg.n_layers - 1}) features: "
+            "no attention remains after them, so suppression is a structural no-op"
         )
         agree = position_diagnostics["ctx_idx_agreement"]
         if agree is not None:
@@ -729,6 +771,10 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             "min_rhyme_percentile": CANDIDATE_MIN_RHYME_PERCENTILE,
             "min_sustain": CANDIDATE_MIN_SUSTAIN,
             "seed": RANDOM_SEED,
+            "n_layers": cfg.n_layers,
+            # Marks a result file as produced *after* the last-layer fix. Files
+            # without it predate it and must not be pooled with these.
+            "excludes_last_layer": True,
             "step_keys": list(STEP_KEYS),
             "grids": {
                 "influence_threshold": list(INFLUENCE_GRID),
@@ -747,6 +793,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
         "statistics": {
             "n_steps": len(step_features),
             "n_unique_features": len(timeline),
+            "n_excluded_last_layer": n_excluded_last_layer,
             "n_planning_features": len(planning),
             "n_execution_features": len(execution),
             "n_candidates": len(candidates),
