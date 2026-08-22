@@ -1,0 +1,371 @@
+{
+  "size": "4b",
+  "loader": "hf",
+  "model": "google/gemma-3-4b-it",
+  "max_steps": 20,
+  "chat_prefix": "<bos><start_of_turn>user\n",
+  "n_prompts": 11,
+  "bare_rhyme_rate": 8,
+  "prefixed_rhyme_rate": 6,
+  "discordant_lost": [
+    "mom",
+    "ten"
+  ],
+  "discordant_gained": [],
+  "mcnemar_p": 0.5,
+  "n_diverged": 3,
+  "diverged": [
+    "inspire",
+    "mom",
+    "ten"
+  ],
+  "control_mismatch": [
+    [
+      "greatest",
+      "near_rhyme",
+      "none"
+    ],
+    [
+      "nursery",
+      "none",
+      "near_rhyme"
+    ],
+    [
+      "original",
+      "rhyme",
+      "none"
+    ]
+  ],
+  "rows": [
+    {
+      "slug": "greatest",
+      "target": "greatest",
+      "bare": {
+        "text": "Now he's retired, and he's at his rest.",
+        "n_generated": 14,
+        "n_prompt_tokens": 18,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "rest",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "But now he's lost, and filled with regret.",
+        "n_generated": 12,
+        "n_prompt_tokens": 21,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "regret",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": true,
+      "shipped_label": "near_rhyme"
+    },
+    {
+      "slug": "possible",
+      "target": "possible",
+      "bare": {
+        "text": "With perseverance, you'll be successful.",
+        "n_generated": 9,
+        "n_prompt_tokens": 16,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "successful",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "With grit and hope, we reached the visible.",
+        "n_generated": 10,
+        "n_prompt_tokens": 19,
+        "stopped_on": 107,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "visible",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.167
+      },
+      "labels_agree": true,
+      "shipped_label": "none"
+    },
+    {
+      "slug": "nursery",
+      "target": "nursery",
+      "bare": {
+        "text": "A silent promise, pure and blurry.",
+        "n_generated": 8,
+        "n_prompt_tokens": 16,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "near_rhyme",
+        "rhyme_word": "blurry",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "A silent, shimmering, hopeful flurry.",
+        "n_generated": 8,
+        "n_prompt_tokens": 19,
+        "stopped_on": 107,
+        "hit_max_steps": false,
+        "label": "near_rhyme",
+        "rhyme_word": "flurry",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": true,
+      "shipped_label": "none"
+    },
+    {
+      "slug": "treasure",
+      "target": "treasure",
+      "bare": {
+        "text": "Beneath the sand, a glittering pleasure.",
+        "n_generated": 9,
+        "n_prompt_tokens": 17,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "pleasure",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.143
+      },
+      "prefixed": {
+        "text": "Beneath the sand, a glittering measure.",
+        "n_generated": 9,
+        "n_prompt_tokens": 20,
+        "stopped_on": 106,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "measure",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.143
+      },
+      "labels_agree": true,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "realm",
+      "target": "realm",
+      "bare": {
+        "text": "Protecting the kingdom, a fiery helm.",
+        "n_generated": 9,
+        "n_prompt_tokens": 18,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "helm",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.143
+      },
+      "prefixed": {
+        "text": "His fiery breath, a scorching, crimson helm.",
+        "n_generated": 10,
+        "n_prompt_tokens": 21,
+        "stopped_on": 106,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "helm",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": true,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "thunder",
+      "target": "thunder",
+      "bare": {
+        "text": "A storm was brewing, a fearsome wonder.",
+        "n_generated": 10,
+        "n_prompt_tokens": 18,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "wonder",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "A sudden storm, a frightful wonder.",
+        "n_generated": 9,
+        "n_prompt_tokens": 21,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "wonder",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": true,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "beneath",
+      "target": "beneath",
+      "bare": {
+        "text": "A silent promise, a hopeful wreath.",
+        "n_generated": 8,
+        "n_prompt_tokens": 18,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "wreath",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "A silent promise, a hopeful wreath.",
+        "n_generated": 8,
+        "n_prompt_tokens": 21,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "wreath",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": true,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "inspire",
+      "target": "inspire",
+      "bare": {
+        "text": "A burning passion, a hopeful fire.",
+        "n_generated": 8,
+        "n_prompt_tokens": 18,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "near_rhyme",
+        "rhyme_word": "fire",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "A spark of hope, a future to aspire.",
+        "n_generated": 10,
+        "n_prompt_tokens": 21,
+        "stopped_on": 106,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "aspire",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.125
+      },
+      "labels_agree": false,
+      "shipped_label": "near_rhyme"
+    },
+    {
+      "slug": "mom",
+      "target": "mom",
+      "bare": {
+        "text": "And they both laughed, a happy bomb.",
+        "n_generated": 9,
+        "n_prompt_tokens": 17,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "bomb",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "A joyful welcome, like a warm sun's pom.",
+        "n_generated": 12,
+        "n_prompt_tokens": 20,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "pom",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": false,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "ten",
+      "target": "ten",
+      "bare": {
+        "text": "And shadows stretched, a silent, ghostly den.",
+        "n_generated": 10,
+        "n_prompt_tokens": 19,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "rhyme",
+        "rhyme_word": "den",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "prefixed": {
+        "text": "And shadows lengthened, dark and then again.",
+        "n_generated": 9,
+        "n_prompt_tokens": 22,
+        "stopped_on": 107,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "dark",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.0
+      },
+      "labels_agree": false,
+      "shipped_label": "rhyme"
+    },
+    {
+      "slug": "original",
+      "target": "it",
+      "bare": {
+        "text": "A tasty treat, a joyful habitat.",
+        "n_generated": 8,
+        "n_prompt_tokens": 19,
+        "stopped_on": 108,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "habitat",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.111
+      },
+      "prefixed": {
+        "text": "A sudden, sweet, and crunchy habit.",
+        "n_generated": 9,
+        "n_prompt_tokens": 22,
+        "stopped_on": 106,
+        "hit_max_steps": false,
+        "label": "none",
+        "rhyme_word": "habit",
+        "looped": false,
+        "inflected_repeat": false,
+        "line_overlap": 0.222
+      },
+      "labels_agree": true,
+      "shipped_label": "rhyme"
+    }
+  ]
+}
