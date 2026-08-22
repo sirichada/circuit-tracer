@@ -191,5 +191,6 @@ cython_debug/
 __pycache__/
 *.py[cod]
 *$py.class
-# Regenerable analysis artifact from experiment/comparing.py
 experiment/comparison.json
+
+docs/
