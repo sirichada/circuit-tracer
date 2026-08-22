@@ -18,6 +18,7 @@ import pytest
 
 import tracing
 from tracing import (
+    CANDIDATE_MIN_RHYME_PERCENTILE,
     build_measurement_set,
     build_timeline,
     collect_ctx_idx,
@@ -26,6 +27,7 @@ from tracing import (
     load_raw_step_nodes,
     parse_node_ids,
     sample_matched_control,
+    select_candidates,
     split_populations,
     step_contexts,
 )
@@ -282,3 +284,47 @@ def test_no_measured_row_is_in_the_last_layer(slug_dir):
             RHYME_STEP,
             N_LAYERS,
         )
+
+
+def test_selection_percentile_is_computed_over_measurable_features_only():
+    """Excluded features must not crowd survivors out of the candidate pool.
+
+    Last-layer features have a direct path to the logit nodes, so they carry the
+    highest attribution influence and sit at the top of every step's ranking.
+    Ranking survivors against a distribution that still contains them pushes
+    measurable features below the median, and `CANDIDATE_MIN_RHYME_PERCENTILE`
+    then discards them. That is what collapsed 1B to a median of 2 candidates
+    with two slugs at zero, while 4B -- proportionally less of it in the final
+    layer -- was barely touched.
+
+    Here three of four features are unmeasurable and outrank the survivor, so
+    the survivor's all-nodes percentile is 25.0 (below the 50.0 cutoff) while
+    its measurable percentile is 100.0 (it is the only one left).
+    """
+    timeline = {
+        (1, 100): {0: 0.1, 1: 0.1},
+        (5, 500): {0: 0.4, 1: 0.4},
+        (5, 501): {0: 0.3, 1: 0.3},
+        (5, 502): {0: 0.2, 1: 0.2},
+    }
+    percentiles = {
+        (1, 100): {0: 25.0, 1: 25.0},
+        (5, 500): {0: 100.0, 1: 100.0},
+        (5, 501): {0: 75.0, 1: 75.0},
+        (5, 502): {0: 50.0, 1: 50.0},
+    }
+
+    stats = feature_stats(timeline, percentiles, 1, N_LAYERS)
+    survivor = next(s for s in stats if s["feat_key"] == (1, 100))
+
+    # The descriptive percentile is untouched -- it still describes the graph.
+    assert survivor["rhyme_percentile"] == 25.0
+    assert survivor["rhyme_percentile"] < CANDIDATE_MIN_RHYME_PERCENTILE
+
+    # The selection percentile ranks it among measurable features only.
+    assert survivor["rhyme_percentile_measurable"] == 100.0
+
+    # And selection uses the second, so the feature survives its own cutoff.
+    survivor["peak_step"] = 0  # peaks strictly before the rhyme step
+    picked = select_candidates([survivor], {(1, 100)})
+    assert [s["feat_key"] for s in picked] == [(1, 100)]

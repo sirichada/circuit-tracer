@@ -308,16 +308,55 @@ def feature_stats(timeline: dict, percentiles: dict, rhyme_step: int, n_layers: 
     conflating that description with the measurement's hypothesis space would be
     the same category error this filter exists to fix.
 
+    **But a percentile used to *report* and a percentile used to *select* are not
+    the same quantity, and reusing one for both is that same error one level up.**
+    Last-layer features have a direct, unmediated path to the logit nodes, so they
+    carry maximal attribution influence and occupy the top of every step's
+    ranking. Ranking survivors against a distribution that still contains them
+    pushes measurable features below the median, and
+    `CANDIDATE_MIN_RHYME_PERCENTILE` then discards them -- worst exactly where the
+    last layer's share of high-influence features is largest. Measured GPU-free
+    over 11 slugs: 1B collapsed to median 2 candidates with two slugs at **zero**,
+    270M to median 11, while 4B (a deeper model, proportionally less of it in the
+    final layer) held at median 48.
+
+    So this returns **two** percentiles per step-of-interest:
+
+    * `rhyme_percentile` / `peak_percentile` -- rank among *all* graph nodes at
+      the step. Descriptive, unchanged, still what gets reported.
+    * `rhyme_percentile_measurable` / `peak_percentile_measurable` -- rank among
+      the features that survive the layer filter, i.e. the ones that could
+      actually be measured. **This is what candidate selection tests**, in
+      `candidate_keys`, `select_candidates`, and `split_populations`.
+
+    This is not a loosened cutoff. The threshold is still 50.0; what changed is
+    that it is now applied over the population the hypothesis space is drawn
+    from, rather than over one the measurement has already excluded.
+
     `n_layers` is **required on purpose**. A default would let a future call site
     silently re-admit unmeasurable features; a required argument forces every
     caller to be reviewed.
     """
+    # Pass 1: who survives. Ranking by normalized influence is identical to
+    # ranking by raw influence (the per-step divisor is a constant), so the
+    # measurable percentiles can be rebuilt from `timeline` alone.
+    survivors = {k: v for k, v in timeline.items() if v and k[0] < n_layers - 1}
+
+    by_step: dict[int, list[tuple[float, tuple]]] = defaultdict(list)
+    for key, step_inf in survivors.items():
+        for step_idx, val in step_inf.items():
+            by_step[step_idx].append((val, key))
+
+    # Same rank formula as `build_timeline`, over the smaller population.
+    measurable: dict[tuple, dict[int, float]] = defaultdict(dict)
+    for step_idx, entries in by_step.items():
+        entries.sort(key=lambda t: -t[0])
+        n = len(entries)
+        for rank, (_, key) in enumerate(entries):
+            measurable[key][step_idx] = 100.0 * (n - rank) / n
+
     stats = []
-    for key, step_inf in timeline.items():
-        if not step_inf:
-            continue
-        if key[0] >= n_layers - 1:  # no attention remains after this MLP
-            continue
+    for key, step_inf in survivors.items():
         steps_sorted = sorted(step_inf)
         peak_val = max(step_inf.values())
         peak_step = max(step_inf, key=lambda s: step_inf[s])
@@ -331,8 +370,10 @@ def feature_stats(timeline: dict, percentiles: dict, rhyme_step: int, n_layers: 
                 "peak_step": peak_step,
                 "peak_val": peak_val,
                 "peak_percentile": percentiles[key].get(peak_step, 0.0),
+                "peak_percentile_measurable": measurable[key].get(peak_step, 0.0),
                 "rhyme_val": rhyme_val,
                 "rhyme_percentile": percentiles[key].get(rhyme_step, 0.0),
+                "rhyme_percentile_measurable": measurable[key].get(rhyme_step, 0.0),
                 "sustain_ratio": rhyme_val / peak_val if peak_val > 0 else 0.0,
             }
         )
@@ -346,13 +387,18 @@ def candidate_keys(
 
     Planning features (peaking strictly before the rhyme) that are also prominent
     *at* the rhyme step and hold a good share of their peak influence until then.
+
+    Prominence is tested against `rhyme_percentile_measurable` -- rank among the
+    features that survive the layer filter -- not the all-nodes `rhyme_percentile`
+    that gets reported. See `feature_stats` for why the two must not be the same
+    number here.
     """
     out = [
         s
         for s in stats
         if s["peak_step"] < rhyme_step
         and s["feat_key"] in rhyme_step_features
-        and s["rhyme_percentile"] >= min_pct
+        and s["rhyme_percentile_measurable"] >= min_pct
         and s["sustain_ratio"] >= min_sustain
     ]
     out.sort(key=lambda x: -(x["peak_val"] + x["rhyme_val"]))
@@ -365,7 +411,7 @@ def select_candidates(planning: list[dict], rhyme_step_features: set) -> list[di
         e
         for e in planning
         if e["feat_key"] in rhyme_step_features
-        and e["rhyme_percentile"] >= CANDIDATE_MIN_RHYME_PERCENTILE
+        and e["rhyme_percentile_measurable"] >= CANDIDATE_MIN_RHYME_PERCENTILE
         and e["sustain_ratio"] >= CANDIDATE_MIN_SUSTAIN
     ]
     out.sort(key=lambda x: -(x["peak_val"] + x["rhyme_val"]))
@@ -395,14 +441,17 @@ def split_populations(stats: list[dict], rhyme_step_features: set, rhyme_step: i
         if s["peak_step"] >= rhyme_step:
             execution.append(s)
             continue
-        passed_pct = s["rhyme_percentile"] >= CANDIDATE_MIN_RHYME_PERCENTILE
+        # Measurable-population percentile, matching `select_candidates`. Using
+        # the all-nodes one here would make near-miss membership disagree with
+        # candidate membership, and the two pools have to partition cleanly.
+        passed_pct = s["rhyme_percentile_measurable"] >= CANDIDATE_MIN_RHYME_PERCENTILE
         passed_sus = s["sustain_ratio"] >= CANDIDATE_MIN_SUSTAIN
         if passed_pct and passed_sus:
             candidates.append(s)
             continue
         near_pct = (
             (CANDIDATE_MIN_RHYME_PERCENTILE - PERCENTILE_MARGIN)
-            <= s["rhyme_percentile"]
+            <= s["rhyme_percentile_measurable"]
             < CANDIDATE_MIN_RHYME_PERCENTILE
         )
         near_sus = (
@@ -529,6 +578,10 @@ def _serialize(entries: list[dict], extra: tuple[str, ...] = ()) -> list[dict]:
         "rhyme_val",
         "sustain_ratio",
         "rhyme_percentile",
+        # Both are emitted: the all-nodes one is descriptive, the measurable one
+        # is what selection actually tested. Reporting only the first would make
+        # a shipped candidate look like it failed its own cutoff.
+        "rhyme_percentile_measurable",
     ) + extra
     out = []
     for e in entries:
