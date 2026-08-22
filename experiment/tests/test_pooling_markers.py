@@ -1,13 +1,9 @@
 """The pooling guard in `comparing.py`.
 
-Two code changes altered what a "candidate" means without altering the shape of
-the result files: `9684989` (drop causally-unreachable last-layer features) and
-`de8e67f` (rank the percentile cutoff over the measurable population). Files
-from between them carry `excludes_last_layer: true` and look poolable.
-
+Successive changes altered what a "candidate" means without altering the shape
+of the result files, so a file can carry one marker and still predate another.
 Every statistic in `comparing.py` aggregates rows across prompts and sizes, so
-mixing generations produces a number that looks fine and means nothing. These
-pin the guard that refuses it.
+mixing generations produces a number that looks fine and means nothing.
 """
 
 from __future__ import annotations
@@ -35,7 +31,7 @@ def test_mixing_generations_raises():
     """The trap: both files claim excludes_last_layer, one is still stale."""
     results = {
         ("270m", "realm"): payload(),
-        ("1b", "realm"): payload(population=None),  # 9684989..de8e67f
+        ("1b", "realm"): payload(population=None),  # older generation
     }
     with pytest.raises(RuntimeError, match="disagree on how they were measured"):
         check_pooling_markers(results)

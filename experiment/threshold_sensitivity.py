@@ -1,6 +1,6 @@
 """Threshold sensitivity and feature-selection controls. GPU-free.
 
-Answers the reviewer question behind `action_plan.md` Phase 4 step 9 -- "are the
+Answers the reviewer question -- "are the
 selected features genuinely rhyme-specific, or just generically high-influence?"
 -- in three parts:
 

@@ -87,22 +87,14 @@ MARKERS = ("excludes_last_layer", "selection_percentile_population")
 def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
     """Refuse to aggregate result files produced under different definitions.
 
-    Every statistic below pools rows across prompts and across sizes. That is
-    only meaningful if each file answers the same question, and twice now the
-    question changed underneath the files:
-
-    * `9684989` stopped admitting last-layer features, whose suppression is
-      bit-identical to baseline by construction.
-    * `de8e67f` moved the candidate percentile cutoff onto the measurable
-      population, after the first change crowded survivors below it.
-
-    Files from between the two carry `excludes_last_layer: true` and look
-    poolable. A marker that only distinguishes the most recent fix is the
-    failure this check exists to catch, which is why it compares the whole
-    marker tuple and treats *absent* as the old value rather than as unknown.
+    Every statistic below pools rows across prompts and sizes, which is only
+    meaningful if each file answers the same question. Definitions of what counts
+    as a candidate have changed more than once, so a file can carry one marker
+    and still predate another -- hence comparing the whole tuple, and treating
+    *absent* as the old value rather than as unknown.
 
     Raises rather than warns: a silently mixed pool produces a number that looks
-    fine and means nothing, and this is the last step before the paper.
+    fine and means nothing.
     """
     seen: dict[tuple, list[str]] = defaultdict(list)
     for (size, slug), payload in sorted(results.items()):
@@ -124,9 +116,8 @@ def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
             "result files disagree on how they were measured, so pooling them "
             "would mix incomparable quantities:\n"
             + "\n".join(lines)
-            + "\n\nRe-run the tracing stage for the older group; see "
-            "`methodology_evidence.md` section 9. Do not work around this by "
-            "restricting --sizes until the error goes away -- that silently "
+            + "\n\nRe-run the tracing stage for the older group. Do not work "
+            "around this by restricting --sizes until the error goes away -- that silently "
             "drops a size from the regression."
         )
 
@@ -135,8 +126,7 @@ def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
         desc = ", ".join(f"{m}={v!r}" for m, v in zip(MARKERS, sig))
         print(
             f"  WARNING: all files are internally consistent but stale ({desc}).\n"
-            "           They pool with each other, not with anything measured after "
-            "`de8e67f`."
+            "           They pool with each other, not with anything measured since."
         )
 
     versions = {
@@ -371,7 +361,7 @@ def fixed_k(rows: list[dict], k: int = FIXED_K) -> float | None:
 
     `logit_drop` rather than `prob_drop`: probability cannot register an effect
     once the target is already near zero, and `prob_drop` is bounded above by
-    `original_prob` (`methodology_evidence.md` §1).
+    `original_prob`.
     """
     top = sorted(best_per_feature(rows), key=lambda r: -r["logit_drop"])[:k]
     return mean([r["logit_drop"] for r in top]) if len(top) == k else None

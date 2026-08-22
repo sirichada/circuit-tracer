@@ -1,6 +1,6 @@
 """Phase 1 (word-first) prompt-set selection tool.
 
-Implements action_plan.md Phase 1 steps 0-5, following PeRDict's actual
+Follows PeRDict's actual
 method (Crossley et al. 2024) of restricting rhyme-family-size to a
 frequency-banded word list rather than raw CMUdict, so obscure/proper-noun
 rhymes (e.g. "pixel" <-> "bichsel") don't pollute the "hard" band. PeRDict
@@ -73,7 +73,7 @@ TOKENIZER_MODELS = ["google/gemma-3-270m", "google/gemma-3-1b-pt", "google/gemma
 # Evenly-spaced grid in log10(rhymes_all), 1 to 115: step = log10(115)/9 ~=
 # 0.229 log10 units (~1.69x per step). Fixed in advance rather than found by
 # iterative gap-patching, which has no natural stopping point - see
-# action_plan.md's "Prompt set redesign ... n=10, evenly log-spaced" section.
+# Prompt set redesign: n=10, evenly log-spaced.
 GRID_TARGETS = [1, 2, 3, 5, 8, 14, 24, 40, 68, 115]
 
 # One word per rhyme family in a candidate list, so a list spans distinct
@@ -89,7 +89,7 @@ MAX_PER_FAMILY = 1
 # Earlier revisions used percentile tertiles, then absolute in-band thresholds
 # with a separate raw-count cap. Both were abandoned: they carried tuned
 # constants that no claim rested on, and a short paper defending them hands
-# reviewers surface to attack. See rhyme_rule_decisions.md.
+# reviewers surface to attack.
 DIFFICULTY_LABELS = {0: "hard", 1: "medium", 2: "easy"}
 
 CONTENT_TAGS = {"NN", "NNS", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "JJ", "JJR", "JJS"}

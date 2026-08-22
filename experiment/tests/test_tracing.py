@@ -249,10 +249,8 @@ def test_feature_stats_drops_last_layer_features():
 
     Attention precedes the MLP in a block, so nothing crosses positions after
     `blocks.{n_layers-1}.hook_mlp_out`. Suppressing such a feature at a position
-    before the readout is bit-identical to baseline *by construction*. The
-    pipeline used to admit these and pool the structural zeros as measured nulls
-    -- 128 of 230 rows in the 270M/`inspire` measurement. See
-    `methodology_evidence.md` section 9.
+    before the readout is bit-identical to baseline *by construction*, and the
+    pipeline used to pool those structural zeros as measured nulls.
     """
     timeline = {(1, 100): {0: 0.5, 1: 0.4}, (5, 500): {0: 0.5, 1: 0.4}}
     percentiles = {(1, 100): {0: 90.0, 1: 80.0}, (5, 500): {0: 90.0, 1: 80.0}}
@@ -292,10 +290,8 @@ def test_selection_percentile_is_computed_over_measurable_features_only():
     Last-layer features have a direct path to the logit nodes, so they carry the
     highest attribution influence and sit at the top of every step's ranking.
     Ranking survivors against a distribution that still contains them pushes
-    measurable features below the median, and `CANDIDATE_MIN_RHYME_PERCENTILE`
-    then discards them. That is what collapsed 1B to a median of 2 candidates
-    with two slugs at zero, while 4B -- proportionally less of it in the final
-    layer -- was barely touched.
+    measurable features below the median, where
+    `CANDIDATE_MIN_RHYME_PERCENTILE` discards them.
 
     Here three of four features are unmeasurable and outrank the survivor, so
     the survivor's all-nodes percentile is 25.0 (below the 50.0 cutoff) while

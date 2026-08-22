@@ -4,7 +4,7 @@ Background
 ----------
 Generation ran on the bare prompt; attribution ran on `CHAT_PREFIX + prompt`,
 four tokens apart. The graphs therefore describe a context the generator never
-saw. The open question (J2 in `experiment_fix_plan.md`) is whether that gap is
+saw. The open question is whether that gap is
 bookkeeping or a real divergence.
 
 An earlier probe on this machine (`experiment/chat_prefix_probe_4b_output.log`)

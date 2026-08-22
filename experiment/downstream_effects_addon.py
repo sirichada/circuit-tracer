@@ -26,7 +26,7 @@ Rows carry `original_logit` / `suppressed_logit` for the rhyme token alongside
 the full-vocabulary `logsumexp` of each pass. Probabilities alone cannot express
 the cross-pass contrast -- the normaliser differs between the two passes -- and
 `prob_drop` is bounded above by `original_prob`, so it saturates exactly where
-the rhyme is already unlikely. See `methodology_evidence.md` §1 (Zhang & Nanda).
+the rhyme is already unlikely.
 """
 
 from __future__ import annotations

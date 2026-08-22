@@ -97,8 +97,8 @@ POPULATION_CEILING = 1000
 # Generation is ~20 sequential forwards and dominates runtime, so only a subset
 # of measured features gets a saved continuation. Ranked by `logit_drop`: Zhang &
 # Nanda recommend against probability, which cannot register an effect once the
-# target probability is near zero (`methodology_evidence.md` §1). Ranked *within*
-# each step-key condition separately, then unioned -- a pooled ranking would let
+# target probability is near zero. Ranked *within* each step-key condition
+# separately, then unioned -- a pooled ranking would let
 # whichever condition has systematically larger effects crowd the other out.
 GENERATION_TOP_N = 20
 
@@ -292,54 +292,25 @@ def collect_ctx_idx(step_features: dict) -> dict[tuple, dict[int, int]]:
 def feature_stats(timeline: dict, percentiles: dict, rhyme_step: int, n_layers: int) -> list[dict]:
     """Per-feature timing/influence summaries, over the *measurable* features only.
 
-    Features in the final layer are dropped. Attention precedes the MLP within a
-    block, so `blocks.{n_layers-1}.hook_mlp_out` is followed only by `ln_final`
-    and the unembed -- no attention layer remains, so nothing crosses positions
-    after it. Suppressing such a feature at any position before the readout gives
-    bit-identical logits *by construction*, and the pipeline used to report those
-    structural zeros as measured nulls. Measured on 270M/`inspire`: layer 17 was
-    128/128 exact-zero `logit_drop`, layer 16 was 0/95, layer 15 was 0/7. See
-    `methodology_evidence.md` section 9 for the full account.
+    Final-layer features are dropped: attention precedes the MLP, so nothing
+    crosses positions after `blocks.{n_layers-1}.hook_mlp_out` and suppressing
+    one before the readout is bit-identical to baseline by construction.
 
-    This restricts which features we make *causal* claims about. It deliberately
-    does **not** touch `build_timeline`/`filter_at`, so `rhyme_val` and
-    `rhyme_percentile` keep their existing denominators (all graph nodes at that
-    step). Last-layer features really do participate in the attribution graph;
-    conflating that description with the measurement's hypothesis space would be
-    the same category error this filter exists to fix.
+    `n_layers` is required rather than defaulted so a new call site cannot
+    silently re-admit them.
 
-    **But a percentile used to *report* and a percentile used to *select* are not
-    the same quantity, and reusing one for both is that same error one level up.**
-    Last-layer features have a direct, unmediated path to the logit nodes, so they
-    carry maximal attribution influence and occupy the top of every step's
-    ranking. Ranking survivors against a distribution that still contains them
-    pushes measurable features below the median, and
-    `CANDIDATE_MIN_RHYME_PERCENTILE` then discards them -- worst exactly where the
-    last layer's share of high-influence features is largest. Measured GPU-free
-    over 11 slugs: 1B collapsed to median 2 candidates with two slugs at **zero**,
-    270M to median 11, while 4B (a deeper model, proportionally less of it in the
-    final layer) held at median 48.
-
-    So this returns **two** percentiles per step-of-interest:
-
-    * `rhyme_percentile` / `peak_percentile` -- rank among *all* graph nodes at
-      the step. Descriptive, unchanged, still what gets reported.
-    * `rhyme_percentile_measurable` / `peak_percentile_measurable` -- rank among
-      the features that survive the layer filter, i.e. the ones that could
-      actually be measured. **This is what candidate selection tests**, in
-      `candidate_keys`, `select_candidates`, and `split_populations`.
-
-    This is not a loosened cutoff. The threshold is still 50.0; what changed is
-    that it is now applied over the population the hypothesis space is drawn
-    from, rather than over one the measurement has already excluded.
-
-    `n_layers` is **required on purpose**. A default would let a future call site
-    silently re-admit unmeasurable features; a required argument forces every
-    caller to be reviewed.
+    Two percentiles are returned. `rhyme_percentile`/`peak_percentile` rank
+    among all graph nodes and are what gets reported;
+    `*_measurable` rank among the features that survive the layer filter and are
+    what selection tests. They must not be the same number: dropped features
+    outrank survivors, so ranking survivors against a distribution containing
+    them pushes them below `CANDIDATE_MIN_RHYME_PERCENTILE`. Normalization in
+    `build_timeline`/`filter_at` is untouched, so the reported denominators still
+    describe the whole graph.
     """
-    # Pass 1: who survives. Ranking by normalized influence is identical to
-    # ranking by raw influence (the per-step divisor is a constant), so the
-    # measurable percentiles can be rebuilt from `timeline` alone.
+    # Ranking by normalized influence is identical to ranking by raw influence
+    # (the per-step divisor is constant), so the measurable percentiles can be
+    # rebuilt from `timeline` alone.
     survivors = {k: v for k, v in timeline.items() if v and k[0] < n_layers - 1}
 
     by_step: dict[int, list[tuple[float, tuple]]] = defaultdict(list)
@@ -675,7 +646,7 @@ def build_measurement_set(
         # Defence in depth, and a *different* check from the two above: those catch
         # a position defect, this catches a population built from a stats list that
         # never went through `feature_stats`' layer filter. Such a row would measure
-        # a guaranteed zero and pool it as a null. See methodology_evidence.md s9.
+        # a guaranteed zero and pool it as a null.
         if r["layer"] >= n_layers - 1:
             raise RuntimeError(
                 f"L{r['layer']} F{r['feat']} is in the final layer (n_layers={n_layers}) "
@@ -825,16 +796,9 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             "min_sustain": CANDIDATE_MIN_SUSTAIN,
             "seed": RANDOM_SEED,
             "n_layers": cfg.n_layers,
-            # Marks a result file as produced *after* the last-layer fix. Files
-            # without it predate it and must not be pooled with these.
+            # Pooling markers: files disagreeing on these were measured under
+            # different candidate definitions. Absent means the old value.
             "excludes_last_layer": True,
-            # Which population the candidate percentile cutoff ranks against.
-            # "all_nodes" files select on a distribution containing features the
-            # measurement excluded, which crowded survivors below the cutoff --
-            # 1B fell to a median of 2 candidates with two slugs at zero. Absent
-            # in files between `9684989` and `de8e67f`, which carry
-            # `excludes_last_layer` but predate this; treat absent as
-            # "all_nodes". See `methodology_evidence.md` section 9.
             "selection_percentile_population": "measurable",
             "code_version": code_version(),
             "step_keys": list(STEP_KEYS),
@@ -951,16 +915,12 @@ def load_model(cfg: SizeConfig, dtype=None):
 def code_version() -> dict:
     """The commit this file was run from, plus whether the tree was dirty.
 
-    Deliberately **not** part of `provenance()`: that needs a device and imports
-    torch, so it never runs on the `--no-interventions` path, and the GPU-free
-    outputs are exactly the ones that get regenerated most often.
+    Separate from `provenance()`, which needs a device and imports torch and so
+    never runs on the `--no-interventions` path.
 
-    This exists because per-fix marker flags do not scale. `excludes_last_layer`
-    distinguished the last-layer fix and nothing after it, so files written
-    between `9684989` and `de8e67f` carried it while still selecting candidates
-    on the old percentile -- they looked poolable and were not. A commit hash
-    identifies a file against *any* future change without anyone inventing a new
-    flag first.
+    Per-fix marker flags do not scale: each one distinguishes its own change and
+    nothing after it. A commit hash identifies a file against any later change
+    without a new flag being invented first.
     """
     import subprocess
 

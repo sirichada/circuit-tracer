@@ -221,7 +221,7 @@ def last_content_word(text: str) -> tuple[str, int] | None:
 
 
 def classify(generated: str, target: str) -> str:
-    """Pre-registered rules (action_plan.md Phase 3 step 7). Repetition is
+    """Pre-registered rules. Repetition is
     checked first: a word trivially rhymes with itself."""
     if generated == target or same_lemma(generated, target):
         return "repetition"
