@@ -828,6 +828,15 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             # Marks a result file as produced *after* the last-layer fix. Files
             # without it predate it and must not be pooled with these.
             "excludes_last_layer": True,
+            # Which population the candidate percentile cutoff ranks against.
+            # "all_nodes" files select on a distribution containing features the
+            # measurement excluded, which crowded survivors below the cutoff --
+            # 1B fell to a median of 2 candidates with two slugs at zero. Absent
+            # in files between `9684989` and `de8e67f`, which carry
+            # `excludes_last_layer` but predate this; treat absent as
+            # "all_nodes". See `methodology_evidence.md` section 9.
+            "selection_percentile_population": "measurable",
+            "code_version": code_version(),
             "step_keys": list(STEP_KEYS),
             "grids": {
                 "influence_threshold": list(INFLUENCE_GRID),
@@ -937,6 +946,45 @@ def load_model(cfg: SizeConfig, dtype=None):
         device=device,
     )
     return model, tokenizer, device
+
+
+def code_version() -> dict:
+    """The commit this file was run from, plus whether the tree was dirty.
+
+    Deliberately **not** part of `provenance()`: that needs a device and imports
+    torch, so it never runs on the `--no-interventions` path, and the GPU-free
+    outputs are exactly the ones that get regenerated most often.
+
+    This exists because per-fix marker flags do not scale. `excludes_last_layer`
+    distinguished the last-layer fix and nothing after it, so files written
+    between `9684989` and `de8e67f` carried it while still selecting candidates
+    on the old percentile -- they looked poolable and were not. A commit hash
+    identifies a file against *any* future change without anyone inventing a new
+    flag first.
+    """
+    import subprocess
+
+    def _git(*args: str) -> str | None:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(REPO), *args],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None  # no git, no repo, or a source tarball -- not fatal
+        return out.stdout.strip()
+
+    commit = _git("rev-parse", "HEAD")
+    status = _git("status", "--porcelain")
+    return {
+        "commit": commit,
+        # A dirty tree means the commit does not fully describe the run, which
+        # is worth knowing before pooling two files that name the same hash.
+        "dirty": None if status is None else bool(status),
+    }
 
 
 def provenance(device, model_dtype=None) -> dict:

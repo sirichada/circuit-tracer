@@ -81,6 +81,72 @@ def load_all(sizes: list[str]) -> tuple[dict[tuple[str, str], dict], dict[str, i
     return results, rhymes_all
 
 
+MARKERS = ("excludes_last_layer", "selection_percentile_population")
+
+
+def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
+    """Refuse to aggregate result files produced under different definitions.
+
+    Every statistic below pools rows across prompts and across sizes. That is
+    only meaningful if each file answers the same question, and twice now the
+    question changed underneath the files:
+
+    * `9684989` stopped admitting last-layer features, whose suppression is
+      bit-identical to baseline by construction.
+    * `de8e67f` moved the candidate percentile cutoff onto the measurable
+      population, after the first change crowded survivors below it.
+
+    Files from between the two carry `excludes_last_layer: true` and look
+    poolable. A marker that only distinguishes the most recent fix is the
+    failure this check exists to catch, which is why it compares the whole
+    marker tuple and treats *absent* as the old value rather than as unknown.
+
+    Raises rather than warns: a silently mixed pool produces a number that looks
+    fine and means nothing, and this is the last step before the paper.
+    """
+    seen: dict[tuple, list[str]] = defaultdict(list)
+    for (size, slug), payload in sorted(results.items()):
+        cfg = payload.get("config", {})
+        # Absent means the file predates the marker, not that it is unknown.
+        sig = tuple(
+            cfg.get(m, {"selection_percentile_population": "all_nodes"}.get(m, False))
+            for m in MARKERS
+        )
+        seen[sig].append(f"{size}/{slug}")
+
+    if len(seen) > 1:
+        lines = []
+        for sig, files in sorted(seen.items(), key=lambda kv: -len(kv[1])):
+            desc = ", ".join(f"{m}={v!r}" for m, v in zip(MARKERS, sig))
+            shown = ", ".join(files[:6]) + (f", +{len(files) - 6} more" if len(files) > 6 else "")
+            lines.append(f"  {len(files):>3} file(s)  {desc}\n              {shown}")
+        raise RuntimeError(
+            "result files disagree on how they were measured, so pooling them "
+            "would mix incomparable quantities:\n"
+            + "\n".join(lines)
+            + "\n\nRe-run the tracing stage for the older group; see "
+            "`methodology_evidence.md` section 9. Do not work around this by "
+            "restricting --sizes until the error goes away -- that silently "
+            "drops a size from the regression."
+        )
+
+    (sig,) = seen or [(None,)]
+    if sig != (None,) and sig != (True, "measurable"):
+        desc = ", ".join(f"{m}={v!r}" for m, v in zip(MARKERS, sig))
+        print(
+            f"  WARNING: all files are internally consistent but stale ({desc}).\n"
+            "           They pool with each other, not with anything measured after "
+            "`de8e67f`."
+        )
+
+    versions = {
+        (payload.get("config", {}).get("code_version") or {}).get("commit")
+        for payload in results.values()
+    }
+    if len(versions) > 1:
+        print(f"  note: {len(versions)} distinct code_version commits across files: {versions}")
+
+
 def label_of(payload: dict) -> str:
     """Rhyme label, mirrored into every result by tracing.py:298."""
     return payload["config"].get("rhyme_label", "unknown")
@@ -514,6 +580,9 @@ def main() -> None:
             f"no circuit_tracing_results_*.json in {RESULTS_DIR} -- "
             "run experiment/tracing-*.py first"
         )
+    # Before any statistic is computed: a mixed pool must fail here, not produce
+    # a plausible number further down.
+    check_pooling_markers(results)
 
     section_coverage(results, sizes, args.labels)
     section_timing(results, sizes, args.labels)
