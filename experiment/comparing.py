@@ -287,9 +287,10 @@ def section_bands(results, sizes, labels) -> None:
             parts = " ".join(
                 f"{k}={v}({100 * v / n:4.1f}%)" if n else f"{k}={v}" for k, v in counts.items()
             )
+            descriptive = p["config"]["descriptive_only"]
             print(
                 f"  {slug:10s} {label_of(p):12s} "
-                f"[cut {p['config']['early_cutoff']}/{p['config']['mid_cutoff']}]  {parts}"
+                f"[cut {descriptive['early_cutoff']}/{descriptive['mid_cutoff']}]  {parts}"
             )
         grand = sum(totals.values())
         if grand:
