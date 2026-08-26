@@ -90,6 +90,7 @@ diagnosis/
 experiment/tracing
 experiment/threshold
 experiment/logs
+results/
 
 # IPython
 profile_default/
