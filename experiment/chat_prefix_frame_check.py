@@ -1,51 +1,12 @@
-"""J2: does the chat prefix change what the model generates?
+"""Does the chat prefix change what the model generates?
 
-Background
-----------
-Generation ran on the bare prompt; attribution ran on `CHAT_PREFIX + prompt`,
-four tokens apart. The graphs therefore describe a context the generator never
-saw. The open question is whether that gap is
-bookkeeping or a real divergence.
+Standalone diagnostic, not part of the main five-stage pipeline. Runs free
+greedy generation from scratch under both the bare prompt and
+`CHAT_PREFIX + prompt`, same prompts/stop rule/labeller, and reports the
+rhyme rate under each frame plus an exact McNemar test over the paired result.
 
-An earlier probe on this machine (`experiment/chat_prefix_probe_4b_output.log`)
-found that `apply_chat_template` collapses rhyming entirely -- 0/11, every
-continuation echoing the prompt's own final word. That is a *third* frame,
-not ours: the template emits a closed user turn plus `<start_of_turn>model\n`,
-which puts the model in answer-a-user mode. Our `CHAT_PREFIX` opens a user turn
-and never closes it, leaving the model mid-utterance in continuation mode. So
-that result does not settle J2 either way.
-
-The single-step check (findings_5070.md 4a) does not settle it either, for the
-reason that report gives: it conditions on the already-generated tokens, and
-those tokens carry the mode. A frame difference that shows up as a change in
-*what gets generated* is invisible to a measurement that fixes what was
-generated.
-
-This script runs the only test that separates them: free greedy generation from
-scratch under both frames, same prompts, same stop rule, same labeller.
-
-Reading the result
-------------------
-The verdict is the **rhyme rate under each frame**, not per-slug agreement:
-
-* Same rate -> the frame does not change the behaviour. If both arms are at
-  zero, that is uninformative rather than reassuring -- the size has no rhyming
-  for the frame to affect.
-* Different rate -> the graphs were attributed in a frame the model rhymes at a
-  different rate in. Generation has to be redone in the attributed frame, which
-  means new graphs, and the gap is a paper-level finding, not a bug.
-
-Run this on a size that actually rhymes. 270M produces none in either frame, so
-it cannot answer the question; 4B is where the earlier probe saw 6/11 vs 0/11.
-
-The comparison against `rhyme_labels.json` is **reported, never a gate**. It
-asks whether this machine reproduces continuations decoded on other hardware --
-bf16 greedy argmax flips on near-ties, so a mismatch is expected across GPUs.
-Both arms here run on one GPU with one set of kernels, so that drift hits them
-equally and cannot manufacture a difference between them.
-
-    python tests/j2_frame_check.py --size 4b            # the one worth running
-    python tests/j2_frame_check.py --size 4b --loader replacement
+    python experiment/chat_prefix_frame_check.py --size 4b            # the one worth running
+    python experiment/chat_prefix_frame_check.py --size 4b --loader replacement
 
 No transcoders and no attribution: this is base-model greedy decoding only.
 """
@@ -78,8 +39,7 @@ from rhyme_labels import (  # noqa: E402
 )
 
 # Model names, transcoder repos and layer counts come from tracing.py's CONFIGS
-# rather than being restated here -- three copies of the checkpoint names is how
-# they went stale last time.
+# rather than being restated here, so there is only one place to keep them current.
 MODELS = {size: cfg.model_name for size, cfg in CONFIGS.items()}
 
 WIDTH = "16k"  # matches generation-gemma-3-*.py
@@ -90,7 +50,7 @@ RHYMED = {"rhyme", "near_rhyme"}
 MAX_STEPS = 20  # matches generation-gemma-3-*.py
 PROMPT_SET_PATH = REPO / "tools" / "prompt_set.json"
 LABELS_PATH = REPO / "experiment" / "rhyme_labels.json"
-OUT_PATH = REPO / "experiment" / "j2_frame_check_{size}.json"
+OUT_PATH = REPO / "results" / "j2_frame_check_{size}.json"
 
 
 def load_model(size: str, loader: str):
@@ -240,11 +200,9 @@ def shipped_labels(size: str) -> dict[str, dict]:
     """Labels for THIS size only, for the arm-A cross-check.
 
     `rhyme_labels.json` is a flat list of records keyed `(size, slug)` -- see
-    `tracing.py`'s `{(r["size"], r["slug"]): r}`. Keying on `slug` alone silently
-    lets each size overwrite the previous one, so the last size in the file wins
-    and every other size gets compared against the wrong labels. That happened:
-    a 1B run was scored against 4B's rhymes and reported six unidirectional
-    "hardware drift" mismatches (p = 0.031) that were pure artifact.
+    `tracing.py`'s `{(r["size"], r["slug"]): r}`. Keying on `slug` alone would
+    silently let each size overwrite the previous one, so the last size in the
+    file wins and every other size gets compared against the wrong labels.
     """
     if not LABELS_PATH.exists():
         return {}
@@ -309,15 +267,7 @@ def main() -> None:
 
     n = len(rows)
 
-    # --- the verdict: per-arm rhyme rate ------------------------------------
-    # Not per-slug label agreement. Greedy decoding at bf16 flips on near-ties,
-    # and a single flip moves one slug between `none` and `near_rhyme` without
-    # the model rhyming any more or less often. Agreement counts every such flip
-    # as divergence; a rate does not. The 5070 run showed why this matters --
-    # swapping only the forward-pass implementation moved agreement from 9/11 to
-    # 6/11, i.e. the per-slug readout was reporting noise at the same magnitude
-    # as any real effect. Rates are what the 4B probe made visible (6/11 vs
-    # 0/11) and are what the paper would report.
+    # The verdict is the rate, not per-slug agreement.
     bare_rate = sum(r["bare"]["label"] in RHYMED for r in rows)
     pref_rate = sum(r["prefixed"]["label"] in RHYMED for r in rows)
 
@@ -325,13 +275,6 @@ def main() -> None:
     print(f"  prefixed  : {pref_rate}/{n} rhymed")
     print(f"  per-slug labels agree on {n - len(diverged)}/{n} (detail, not the verdict)")
 
-    # Paired design -- same 11 prompts under both frames -- so only the
-    # discordant slugs carry information and the test is exact McNemar
-    # (a two-sided sign test on them). A bare rate inequality is not a result:
-    # at n=11 the 4B run gave 8/11 -> 6/11, which is three discordant slugs
-    # splitting 2-1, i.e. p = 1.0. Reaching p < 0.05 here needs >= 6 flips all
-    # in the same direction, which is exactly what the apply_chat_template probe
-    # had (6/11 -> 0/11, p = 0.031) and what the literal CHAT_PREFIX does not.
     down = [r["slug"] for r in rows
             if r["bare"]["label"] in RHYMED and r["prefixed"]["label"] not in RHYMED]
     up = [r["slug"] for r in rows
@@ -343,40 +286,20 @@ def main() -> None:
     print(f"  exact McNemar (two-sided): p = {p_value:.3f}")
 
     if not down and not up:
-        print(f"\nJ2: no slug changed rhyme status under the frame ({bare_rate}/{n} either way).")
-        if bare_rate == 0:
-            print("Both arms are at zero, so this size has no rhyming behaviour for")
-            print("the frame to change -- uninformative about J2 rather than evidence")
-            print("for it. Ask a size that actually rhymes.")
+        print(f"\nno slug changed rhyme status under the frame ({bare_rate}/{n} either way).")
     elif p_value < 0.05:
-        print(f"\nJ2 OPEN: the frame changes the rhyme rate, {bare_rate}/{n} -> "
+        print(f"\nframe changes the rhyme rate: {bare_rate}/{n} -> "
               f"{pref_rate}/{n} (p = {p_value:.3f}).")
-        print("The graphs were attributed in a frame the model rhymes at a different")
-        print("rate in. Regenerating them in the attributed frame is warranted, and")
-        print("the gap is itself a finding about the attribution frame.")
     else:
-        print(f"\nJ2: {bare_rate}/{n} -> {pref_rate}/{n}, not distinguishable from "
+        print(f"\n{bare_rate}/{n} -> {pref_rate}/{n}, not distinguishable from "
               f"decoding noise (p = {p_value:.3f}).")
-        print("Not evidence that the frames agree -- n=11 cannot detect a small")
-        print("effect. It does mean regenerating the graphs is unjustified on this")
-        print("evidence. Report the numbers as a measured limitation instead, and")
-        print("compare the flip count against the cross-GPU note below: if they are")
-        print("the same size, the frame perturbs labels about as much as changing")
-        print("the graphics card does.")
 
-    # --- cross-GPU reproducibility: reported, never a gate -------------------
-    # This compares against continuations decoded on *other* hardware, so it
-    # answers "are the graphs on disk reproducible here", not "is this test
-    # valid". Both arms ran on one GPU with one set of kernels, so drift hits
-    # them identically and cannot manufacture a difference between them.
+    # Cross-GPU reproducibility is reported, never a gate.
     if control_mismatch:
         print(f"\nnote: {len(control_mismatch)}/{n} slugs do not reproduce "
               "rhyme_labels.json on this machine:")
         for slug, was, now in control_mismatch:
             print(f"  {slug}: shipped={was} regenerated={now}")
-        print("  Expected when the graphs were generated on different hardware --")
-        print("  bf16 greedy argmax flips on near-ties. It does not affect the")
-        print("  bare-vs-prefixed comparison above, which is within-machine.")
     elif shipped:
         print("\nnote: arm A reproduces rhyme_labels.json exactly.")
     else:
