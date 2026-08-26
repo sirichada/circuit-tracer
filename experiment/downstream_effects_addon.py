@@ -92,8 +92,8 @@ def _summarize_pass(logits_1d: torch.Tensor, token_id: int) -> dict:
 def compute_baseline(model, tokens: torch.Tensor, token_id: int) -> dict:
     """Unsuppressed next-token distribution for the measurement sequence.
 
-    Hoisted out of the per-feature loop: it is identical for every feature, and
-    was previously recomputed once per candidate.
+    Hoisted out of the per-feature loop: it is identical for every feature, so
+    computing it once and reusing it avoids a redundant forward pass per candidate.
     """
     input_ids = tokens.unsqueeze(0)
     with torch.no_grad():

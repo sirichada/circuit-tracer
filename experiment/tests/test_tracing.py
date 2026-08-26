@@ -1,10 +1,9 @@
 """Golden fixtures for the GPU-free half of the tracing pipeline.
 
-`experiment/` has no CI coverage, and the bug these exist to catch was a silent
-one: suppression interventions were being applied at a *generation step index*
-where the library expects a *token position*, so every measurement in the
-pipeline ablated a token inside the prompt. Nothing crashed. The numbers just
-described the wrong thing.
+`experiment/` has no CI coverage, and position derivation is easy to get wrong
+silently: a suppression intervention indexes into the tokenized input by
+position, not generation step, and confusing the two produces no crash --
+just a measurement of the wrong token.
 
 The fixtures below build small synthetic graphs with known `prompt_tokens` and
 known `ctx_idx`, so the derived positions have an answer to be checked against.
@@ -99,8 +98,8 @@ def test_parse_node_ids_reads_jsnodeid():
 def test_parse_node_ids_refuses_the_cantor_fallback():
     """`feature` is cantor_pairing(layer, feat), not a feature index.
 
-    The old fallback returned it anyway, which produced wrong-but-plausible
-    identities for every node in a graph whose export format had changed.
+    Falling back to it when `jsNodeId` is absent would produce a
+    wrong-but-plausible feature identity instead of a visible failure.
     """
     bad = {"feature_type": "transcoder", "jsNodeId": "", "layer": 3, "feature": 12345}
     with pytest.raises(ValueError, match="cantor"):
@@ -191,11 +190,7 @@ def test_positions_agree_with_ctx_idx_and_stay_in_bounds(slug_dir):
 
 
 def test_step_keys_are_deduplicated_by_position(slug_dir):
-    """A feature whose first and peak step coincide is measured once, not twice.
-
-    Roughly half of all real candidates are in this case (50.8%, n=2560), and the
-    old loop ran the identical intervention twice for every one of them.
-    """
+    """A feature whose first and peak step coincide is measured once, not twice."""
     contexts, step_features, stats, rhyme_feats = build(slug_dir)
     entry = next(s for s in stats if s["feat_key"] == (1, 100))
     entry = {**entry, "first_step": entry["peak_step"]}
@@ -249,8 +244,8 @@ def test_feature_stats_drops_last_layer_features():
 
     Attention precedes the MLP in a block, so nothing crosses positions after
     `blocks.{n_layers-1}.hook_mlp_out`. Suppressing such a feature at a position
-    before the readout is bit-identical to baseline *by construction*, and the
-    pipeline used to pool those structural zeros as measured nulls.
+    before the readout is bit-identical to baseline *by construction*, so pooling
+    it as a measured null would misrepresent a structural zero as an effect.
     """
     timeline = {(1, 100): {0: 0.5, 1: 0.4}, (5, 500): {0: 0.5, 1: 0.4}}
     percentiles = {(1, 100): {0: 90.0, 1: 80.0}, (5, 500): {0: 90.0, 1: 80.0}}

@@ -1,4 +1,4 @@
-"""Phase 1 (word-first) prompt-set selection tool.
+"""Word-first prompt-set selection tool.
 
 Follows PeRDict's actual
 method (Crossley et al. 2024) of restricting rhyme-family-size to a
@@ -23,8 +23,8 @@ reading). `load_primary_pronunciations()` parses CMUdict's raw entries
 directly and keeps only the unsuffixed (primary) line per word.
 
 Two metrics are computed:
-  - `family_size`: raw CMUdict rhyme count (Phase 1 step 0, unrestricted).
-    Kept for sanity-checking and as the unrestricted reference point.
+  - `family_size`: raw CMUdict rhyme count, unrestricted. Kept for
+    sanity-checking and as the unrestricted reference point.
   - `banded_family_size`: rhyme count restricted to the top-N wordfreq band
     (this module's primary selection metric).
 
@@ -72,8 +72,7 @@ TOKENIZER_MODELS = ["google/gemma-3-270m", "google/gemma-3-1b-pt", "google/gemma
 
 # Evenly-spaced grid in log10(rhymes_all), 1 to 115: step = log10(115)/9 ~=
 # 0.229 log10 units (~1.69x per step). Fixed in advance rather than found by
-# iterative gap-patching, which has no natural stopping point - see
-# Prompt set redesign: n=10, evenly log-spaced.
+# iterative gap-patching, which has no natural stopping point.
 GRID_TARGETS = [1, 2, 3, 5, 8, 14, 24, 40, 68, 115]
 
 # One word per rhyme family in a candidate list, so a list spans distinct
@@ -86,10 +85,8 @@ MAX_PER_FAMILY = 1
 # labels introduce no parameter of their own. They are descriptive; the
 # headline analysis regresses on log10(family_size) directly.
 #
-# Earlier revisions used percentile tertiles, then absolute in-band thresholds
-# with a separate raw-count cap. Both were abandoned: they carried tuned
-# constants that no claim rested on, and a short paper defending them hands
-# reviewers surface to attack.
+# A percentile-tertile or absolute-in-band-threshold scheme would introduce
+# tuned constants that no claim rests on -- the log10-integer scheme needs none.
 DIFFICULTY_LABELS = {0: "hard", 1: "medium", 2: "easy"}
 
 CONTENT_TAGS = {"NN", "NNS", "VB", "VBD", "VBG", "VBN", "VBP", "VBZ", "JJ", "JJR", "JJS"}
@@ -156,14 +153,14 @@ RHYMING_PART = {
 #
 # Precedent: PeRDict restricted its pool to CMUdict INTERSECT ELP (Crossley &
 # Choi 2024, p. 782), which excludes such entries. `reference_word_list()`
-# below already applies `.isalpha()`, but that filter never reached the
-# partner pool used for counting - this is a bug fix, not a new heuristic.
+# below already applies `.isalpha()`, and this pool must apply it too, since
+# it is the partner pool used for counting.
 #
-# Not caught here, and left to the manual naturalness pass (Phase 1 step 2)
-# for the same reason proper nouns are: same-word spelling variants
-# ("theater"/"theatre", "realise"/"realize") and abbreviations ("feb"/
-# "february") are alphabetic, so no mechanical rule separates them from real
-# rhymes without inventing an unvalidated threshold.
+# Not caught here, and left to the manual naturalness pass for the same reason
+# proper nouns are: same-word spelling variants ("theater"/"theatre",
+# "realise"/"realize") and abbreviations ("feb"/"february") are alphabetic, so
+# no mechanical rule separates them from real rhymes without inventing an
+# unvalidated threshold.
 RHYME_POOL = {w: rp for w, rp in RHYMING_PART.items() if w.isalpha()}
 
 ONSET = {
@@ -451,7 +448,7 @@ def is_content_word(word: str) -> bool:
 
 
 def repetition_control_candidates(sizes: dict[str, int]) -> list[tuple[str, int, str]]:
-    """POS-filtered candidates per Phase 1 step 3, exempt from the easy/hard axis.
+    """POS-filtered candidates, exempt from the easy/hard axis.
 
     Diversified by rhyming_part first (see `diversify_by_family`) for the
     same reason as the easy/hard shortlists: without it, this pool is drawn

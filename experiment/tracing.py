@@ -1,9 +1,8 @@
 """Shared tracing pipeline for all Gemma-3 sizes.
 
-Consolidates what used to be ~730 near-identical lines in each of
-`tracing-{270m,1b,4b}.py`. Those three now supply only their config and call
-`run()` here. Keeping one copy is what stops `RHYME_TOKEN` / `GRAPH_DIR` /
-the checkpoint names from going stale in three places at once.
+`tracing-{270m,1b,4b}.py` supply only their config and call `run()` here.
+Keeping one copy is what stops `RHYME_TOKEN` / `GRAPH_DIR` / the checkpoint
+names from going stale in three places at once.
 
 Two halves:
 
@@ -83,15 +82,12 @@ PERCENTILE_MARGIN = 15.0  # catches rhyme_percentile in [35, 50)
 
 RANDOM_SEED = 0
 
-# There is no measurement cap. `MAX_CANDIDATES_MEASURED = 50` used to be applied
-# as a silent slice, and shipped-cell populations run 19-192 (median ~62) -- so
-# every previously reported mean was a mean over a truncated, high-influence
-# prefix, which is precisely the "generically high-influence" confound the
-# reviewers raised. The population is bounded by construction (a candidate must
-# be present at the rhyme step, so it cannot exceed one step's node count), and
-# the widened loosest cell is only 1.4-2.8x the shipped set. This ceiling exists
-# so a future change that makes the population explode fails visibly instead of
-# quietly truncating -- it is a tripwire, not a parameter.
+# There is no measurement cap: a silent slice over populations would bias any
+# reported mean toward a truncated, high-influence prefix. The population is
+# bounded by construction (a candidate must be present at the rhyme step, so it
+# cannot exceed one step's node count). This ceiling exists so a future change
+# that makes the population explode fails visibly instead of quietly
+# truncating -- it is a tripwire, not a parameter.
 POPULATION_CEILING = 1000
 
 # Generation is ~20 sequential forwards and dominates runtime, so only a subset
@@ -203,8 +199,8 @@ def load_raw_step_nodes(
     times over.
 
     `ctx_idx` is the token position the node was attributed at. It is carried
-    through (it used to be dropped here) because it is the independent check on
-    every derived suppression position.
+    through because it is the independent check on every derived suppression
+    position.
     """
     step_nodes: dict[int, list[dict]] = {}
     step_tokens: dict[int, str] = {}
@@ -1009,11 +1005,11 @@ def run_interventions(model, tokenizer, device, cfg, slug, label, results) -> di
     measurement_prompt = contexts[rhyme_step]["prompt"]
 
     # `ensure_tokenized` is the same entry point attribution used, and it passes
-    # `add_special_tokens=False`. Calling the tokenizer directly instead -- which
-    # is what this pipeline used to do -- takes the default `True` and prepends a
-    # second BOS to a string that already opens with a literal `<bos>`, shifting
-    # every position by one. Routing through the library method is what keeps the
-    # two paths from drifting apart again; it also fires the -it prefix assert.
+    # `add_special_tokens=False`. Calling the tokenizer directly instead takes the
+    # default `True` and prepends a second BOS to a string that already opens
+    # with a literal `<bos>`, shifting every position by one. Routing through the
+    # library method is what keeps the two paths from drifting apart; it also
+    # fires the -it prefix assert.
     tokens = model.ensure_tokenized(measurement_prompt)
     expected = contexts[rhyme_step]["ntok"]
     if int(tokens.shape[0]) != expected:

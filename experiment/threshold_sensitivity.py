@@ -1,8 +1,7 @@
 """Threshold sensitivity and feature-selection controls. GPU-free.
 
-Answers the reviewer question -- "are the
-selected features genuinely rhyme-specific, or just generically high-influence?"
--- in three parts:
+Answers "are the selected features genuinely rhyme-specific, or just
+generically high-influence?" in three parts:
 
   1. **Sweep**: re-select candidates under a grid of cutoffs and report how
      `n_candidates` and the top suppression effects move.
@@ -12,11 +11,11 @@ selected features genuinely rhyme-specific, or just generically high-influence?"
      influence distribution. If they move it just as much, the selection isn't
      distinguishing anything.
 
-**This script no longer loads a model.** It used to run its own interventions
-for parts 2 and 3, which meant a second model load per size and a measurement
-set that could silently disagree with tracing's. `tracing.py` now measures the
-union of all four populations in one pass and tags each row with its
-memberships; everything here is a join against `circuit_tracing_results_*.json`.
+**This script does not load a model.** A second model load per size here would
+risk a measurement set that silently disagrees with `tracing.py`'s, so
+`tracing.py` measures the union of all four populations in one pass and tags
+each row with its memberships; everything here is a join against
+`circuit_tracing_results_*.json`.
 
 Coverage has three distinguishable causes
 -----------------------------------------
@@ -24,8 +23,7 @@ Coverage has three distinguishable causes
 is an argmax over *normalised* influence -- the normaliser changes with the
 floor, so a feature's `peak_step` at one grid cell need not be the one the GPU
 pass measured. That makes `n_measured < n_candidates` ambiguous between three
-quite different things, and the previous version reported a single number that
-conflated them. Every sweep row now breaks the shortfall down:
+quite different things, so every sweep row breaks the shortfall down:
 
   * `hit`                       -- measured at exactly this cell's position
   * `measured_at_other_position` -- this feature was measured, but its peak_step
@@ -254,10 +252,10 @@ def summarize(rows: list[dict], n_selected: int) -> dict:
     """Row-level effect statistics plus the feature-level coverage check.
 
     `n_selected` counts *features* chosen by the analysis; `n_features_measured`
-    counts features that came back from the GPU pass. With the measurement cap
-    gone these must agree -- a gap now means a measurement genuinely failed,
-    where it used to mean a limit was hit. `n_rows_measured` is larger than both
-    whenever a feature was measured at two positions.
+    counts features that came back from the GPU pass. There is no measurement
+    cap, so these must agree -- a gap means a measurement genuinely failed.
+    `n_rows_measured` is larger than both whenever a feature was measured at two
+    positions.
     """
     if not rows:
         return {

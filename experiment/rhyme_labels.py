@@ -1,12 +1,12 @@
 """Label each generated continuation as rhyme / near_rhyme / repetition / none.
 
-Implements Phase 3 steps 5 + 7 of the revision plan. Reads the attribution
-graphs written by `generation-gemma-3-*.py`, reconstructs what each model
-actually generated, finds the rhyme word, and scores it against the prompt's
-target using the CMUdict layer already built in `tools/prompt_set.py`.
+Reads the attribution graphs written by `generation-gemma-3-*.py`,
+reconstructs what each model actually generated, finds the rhyme word, and
+scores it against the prompt's target using the CMUdict layer already built
+in `tools/prompt_set.py`.
 
-Emits `experiment/rhyme_labels.json`, which is the config source the tracing
-stage reads in place of the old hardcoded `RHYME_TOKEN` / `RHYME_STEP`.
+Emits `experiment/rhyme_labels.json`, which is `tracing.py`'s sole config
+source for each prompt's rhyme token and rhyme step.
 
 No model, no GPU, no network -- pure JSON parsing plus CMUdict.
 
@@ -57,7 +57,7 @@ class Label:
     n_steps: int
     # Natural-match diagnostics (README "line overlap"). Reported, never
     # thresholded -- they describe how much the model echoed the prompt rather
-    # than composing, which is the failure mode reviewers flagged.
+    # than composing a genuine rhyme.
     line_overlap: float = 0.0
     looped: bool = False
     inflected_repeat: bool = False
@@ -66,8 +66,8 @@ class Label:
 
 def _lemmatizer():
     """WordNet if its corpus is installed, else None. Lemma matching is a
-    refinement of the repetition rule, not a prerequisite -- exact match
-    still catches the failure mode the reviewers named."""
+    refinement of the repetition rule, not a prerequisite -- exact match still
+    catches the model echoing the prompt word verbatim."""
     try:
         from nltk.stem import WordNetLemmatizer
 
