@@ -1,4 +1,4 @@
-# circuit tracer for poetry replication
+# Investigating Forward Planning Behaviors in Smaller LLMs through Transcoder Circuit Tracing
 
 ## Overview
 
@@ -45,6 +45,8 @@ The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — usin
 | rhyme-circuit candidate | A planning feature also active at the rhyme step, at or above the configured influence/percentile/sustain cutoffs. | `candidate_keys()` |
 | `logit_drop` | Drop in the rhyme token's logit when a feature is suppressed at its recorded position. The headline suppression statistic (mean over top k=10) — unlike `prob_drop`, it doesn't saturate once the target probability is near zero. | `downstream_effects_addon.py` |
 | last-layer exclusion | Features in the model's final layer can't affect any later position (no attention layer follows the last MLP), so their suppression effect is always exactly zero. Excluded from every measured population. | `feature_stats(n_layers=...)` |
+
+Code documentation was generated with Claude (Anthropic).
 
 ---
 
