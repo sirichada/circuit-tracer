@@ -1118,34 +1118,47 @@ def run(
                 print(f"  [{cfg.size}] {s}: no graphs -- skipping")
 
     model = tokenizer = device = None
-    for slug in targets:
-        label = labels.get((cfg.size, slug))
-        if label is None:
-            print(f"  [{cfg.size}] {slug}: no rhyme label -- skipping")
-            continue
-        if label["rhyme_step"] is None:
-            print(f"  [{cfg.size}] {slug}: {label['label']} -- skipping")
-            continue
+    try:
+        for slug in targets:
+            label = labels.get((cfg.size, slug))
+            if label is None:
+                print(f"  [{cfg.size}] {slug}: no rhyme label -- skipping")
+                continue
+            if label["rhyme_step"] is None:
+                print(f"  [{cfg.size}] {slug}: {label['label']} -- skipping")
+                continue
 
-        results = analyze_prompt(cfg, slug, label)
+            results = analyze_prompt(cfg, slug, label)
 
-        if interventions:
-            if model is None:
-                import torch
+            if interventions:
+                if model is None:
+                    import torch
 
-                model, tokenizer, device = load_model(
-                    cfg, dtype=getattr(torch, dtype_name)
-                )
-            results = run_interventions(model, tokenizer, device, cfg, slug, label, results)
+                    model, tokenizer, device = load_model(
+                        cfg, dtype=getattr(torch, dtype_name)
+                    )
+                results = run_interventions(model, tokenizer, device, cfg, slug, label, results)
 
-        out = cfg.results_path(slug)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(json.dumps(results, indent=2))
-        try:
-            shown = out.relative_to(EXPERIMENT)
-        except ValueError:  # RESULTS_DIR overridden outside EXPERIMENT (or relative)
-            shown = out
-        print(f"  wrote {shown}")
+            out = cfg.results_path(slug)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(results, indent=2))
+            try:
+                shown = out.relative_to(EXPERIMENT)
+            except ValueError:  # RESULTS_DIR overridden outside EXPERIMENT (or relative)
+                shown = out
+            print(f"  wrote {shown}")
+    finally:
+        # A model held alive at interpreter shutdown can have its CUDA tensor
+        # __del__ finalizers race with stdout teardown. Freeing it explicitly,
+        # even on an exception partway through targets, avoids that.
+        if model is not None:
+            import sys
+
+            import torch
+
+            del model
+            torch.cuda.empty_cache()
+            sys.stdout.flush()
 
 
 def main(size: str) -> None:
