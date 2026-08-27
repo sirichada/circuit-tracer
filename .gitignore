@@ -81,9 +81,16 @@ demos/**/graphs
 demos/**/graph_files
 demos/**/*.json
 experiment/graphs
+experiment/graphs.bak-*
+experiment/graphs *-*-*
+experiment/*.log.err
+diagnosis/
 .DS_Store
 ./github
 experiment/tracing
+experiment/threshold
+experiment/logs
+results/
 
 # IPython
 profile_default/
@@ -185,3 +192,6 @@ cython_debug/
 __pycache__/
 *.py[cod]
 *$py.class
+experiment/comparison.json
+
+docs/

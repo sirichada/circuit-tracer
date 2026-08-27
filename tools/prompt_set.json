@@ -1,0 +1,68 @@
+[
+  {
+    "slug": "greatest",
+    "prompt_text": "A rhyming couplet:\nHe trained for years to be the greatest,\n",
+    "rhyme_word": "greatest",
+    "rhymes_all": 1
+  },
+  {
+    "slug": "possible",
+    "prompt_text": "A rhyming couplet:\nThe climb was hard but possible,\n",
+    "rhyme_word": "possible",
+    "rhymes_all": 2
+  },
+  {
+    "slug": "nursery",
+    "prompt_text": "A rhyming couplet:\nThey painted stars across the nursery,\n",
+    "rhyme_word": "nursery",
+    "rhymes_all": 3
+  },
+  {
+    "slug": "treasure",
+    "prompt_text": "A rhyming couplet:\nThe pirates buried all of their treasure,\n",
+    "rhyme_word": "treasure",
+    "rhymes_all": 5
+  },
+  {
+    "slug": "realm",
+    "prompt_text": "A rhyming couplet:\nThe dragon guarded every inch of the realm,\n",
+    "rhyme_word": "realm",
+    "rhymes_all": 8
+  },
+  {
+    "slug": "thunder",
+    "prompt_text": "A rhyming couplet:\nThe sky lit up and then came thunder,\n",
+    "rhyme_word": "thunder",
+    "rhymes_all": 14
+  },
+  {
+    "slug": "beneath",
+    "prompt_text": "A rhyming couplet:\nThe roots dug down to the earth beneath,\n",
+    "rhyme_word": "beneath",
+    "rhymes_all": 24
+  },
+  {
+    "slug": "inspire",
+    "prompt_text": "A rhyming couplet:\nHer words were all it took to inspire,\n",
+    "rhyme_word": "inspire",
+    "rhymes_all": 40
+  },
+  {
+    "slug": "mom",
+    "prompt_text": "A rhyming couplet:\nShe ran inside to find her mom,\n",
+    "rhyme_word": "mom",
+    "rhymes_all": 68
+  },
+  {
+    "slug": "ten",
+    "prompt_text": "A rhyming couplet:\nThe clock above the door had just struck ten,\n",
+    "rhyme_word": "ten",
+    "rhymes_all": 115
+  },
+  {
+    "slug": "original",
+    "prompt_text": "A rhyming couplet:\nHe saw a carrot and had to grab it,\n",
+    "rhyme_word": "it",
+    "rhymes_all": null
+  }
+]
