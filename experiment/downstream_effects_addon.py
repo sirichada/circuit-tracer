@@ -1,33 +1,4 @@
-"""Suppression measurement: what happens to P(rhyme token) when a feature is zeroed.
-
-Two-phase by design.
-
-  * `measure_features()` is the cheap phase -- one forward pass per feature, no
-    generation. The unsuppressed baseline is computed **once** and reused, since
-    it does not depend on which feature is being suppressed.
-  * `generate_for()` is the expensive phase -- ~20 sequential forwards per call.
-    It runs only for the subset selected from phase one's ranking.
-
-Splitting them is a correctness fix as much as a performance one. When the two
-shared a `try` block, an OOM inside generation discarded the already-computed
-probability/rank/entropy row for that feature: the append never ran. Each phase
-now has its own error isolation, so a generation failure costs a generation.
-
-Positions, not steps
---------------------
-`position` in every row here is a **token index into the measurement sequence**,
-which is what `_get_feature_intervention_hooks` indexes with. It is *not* a
-generation step number. `tracing.step_contexts()` does the conversion; nothing
-in this module infers a position.
-
-Logits, not just probabilities
-------------------------------
-Rows carry `original_logit` / `suppressed_logit` for the rhyme token alongside
-the full-vocabulary `logsumexp` of each pass. Probabilities alone cannot express
-the cross-pass contrast -- the normaliser differs between the two passes -- and
-`prob_drop` is bounded above by `original_prob`, so it saturates exactly where
-the rhyme is already unlikely.
-"""
+"""Suppression measurement: effect on P(rhyme token) of zeroing a feature."""
 
 from __future__ import annotations
 

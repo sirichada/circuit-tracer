@@ -1,45 +1,28 @@
 """Word-first prompt-set selection tool.
 
-Follows PeRDict's actual
-method (Crossley et al. 2024) of restricting rhyme-family-size to a
-frequency-banded word list rather than raw CMUdict, so obscure/proper-noun
-rhymes (e.g. "pixel" <-> "bichsel") don't pollute the "hard" band. PeRDict
-used COCA; we use `wordfreq` as a pip-installable, cleanly-licensed stand-in
-(its frozen ~2021 snapshot is a plausible feature here, not a bug: it
-predates LLM-generated text polluting frequency norms).
+Follows PeRDict's method (Crossley et al. 2024) of restricting rhyme-family
+size to a frequency-banded word list rather than raw CMUdict, so obscure/
+proper-noun rhymes don't pollute the "hard" band. Uses `wordfreq` in place of
+PeRDict's COCA.
 
-Rhyme matching uses each word's PRIMARY CMUdict pronunciation only, not the
-`pronouncing` library's default of unioning across all listed variants.
-Raw CMUdict marks heteronyms/alternate pronunciations as separate entries
-(e.g. "tear" / "tear(2)", "again" / "again(2)") - `pronouncing.rhymes()`
-strips the "(N)" suffix and merges them, which silently unions phonetically
-distinct rhyme families under one word (e.g. "tear" the verb, T-EH-R,
-rhymes with "care"/"fair"; "tear" the noun, T-IH-R, rhymes with
-"clear"/"near" - a heteronym, not a pronunciation variant of one word/
-meaning; "again" similarly merges a dominant AH0-G-EH1-N reading that
-rhymes with "when" with a rarer AH0-G-EY1-N reading that rhymes with
-"brain", producing rhyme pairs that only work under the less common
-reading). `load_primary_pronunciations()` parses CMUdict's raw entries
-directly and keeps only the unsuffixed (primary) line per word.
+Rhyme matching uses each word's PRIMARY CMUdict pronunciation only.
+`pronouncing.rhymes()` merges heteronyms (e.g. "tear" the verb vs. the noun)
+under one word, silently unioning phonetically distinct rhyme families.
+`load_primary_pronunciations()` parses CMUdict directly to avoid this.
 
-Two metrics are computed:
-  - `family_size`: raw CMUdict rhyme count, unrestricted. Kept for
-    sanity-checking and as the unrestricted reference point.
-  - `banded_family_size`: rhyme count restricted to the top-N wordfreq band
-    (this module's primary selection metric).
+Two metrics: `family_size` (raw CMUdict count, unrestricted) and
+`banded_family_size` (restricted to the top-N wordfreq band -- the primary
+selection metric).
 
 Band size is pinned to 10,000: at 1,000/2,500/5,000 the fraction of
 zero-in-band-rhyme words (~34-41%) exceeds the tertile's 33rd-percentile
-mark, so the "hard" cutoff degenerates to 0 (indistinguishable from "no
-rhyme at all"). At 10,000 the zero-rhyme fraction drops to ~29%, under the
-tertile threshold, giving a non-degenerate hard band. PeRDict's own
-headline models used the 1,000/2,500 bands, but their Table 2 reports the
-same zero-inflation pattern (e.g. only 538/994 words with any rhyme at the
-1,000-word band) - the wider band is a deviation from their exact choice
-of band, not from their method.
+mark, so the "hard" cutoff degenerates to 0. At 10,000 it drops to ~29%,
+under the threshold. PeRDict's own smaller bands show the same zero-inflation
+in their Table 2 -- the wider band is a deviation from their band size, not
+their method.
 
-Run directly to print the shortlists; final word picks and sentences are
-decided by hand and hardcoded into `tools/prompt_set.json`.
+Run directly to print the shortlists; final picks are hardcoded into
+`tools/prompt_set.json`.
 """
 
 import argparse

@@ -1,38 +1,5 @@
-"""Threshold sensitivity and feature-selection controls. GPU-free.
-
-Answers "are the selected features genuinely rhyme-specific, or just
-generically high-influence?" in three parts:
-
-  1. **Sweep**: re-select candidates under a grid of cutoffs and report how
-     `n_candidates` and the top suppression effects move.
-  2. **Near-miss**: features that fail the candidate filter by a small margin.
-     If they move the rhyme probability, the cutoff is discarding real signal.
-  3. **Matched control**: non-candidate features matched to the candidate set's
-     influence distribution. If they move it just as much, the selection isn't
-     distinguishing anything.
-
-**This script does not load a model.** A second model load per size here would
-risk a measurement set that silently disagrees with `tracing.py`'s, so
-`tracing.py` measures the union of all four populations in one pass and tags
-each row with its memberships; everything here is a join against
-`circuit_tracing_results_*.json`.
-
-Coverage has three distinguishable causes
------------------------------------------
-`run_sweep` recomputes `feature_stats` at every influence floor, and `peak_step`
-is an argmax over *normalised* influence -- the normaliser changes with the
-floor, so a feature's `peak_step` at one grid cell need not be the one the GPU
-pass measured. That makes `n_measured < n_candidates` ambiguous between three
-quite different things, so every sweep row breaks the shortfall down:
-
-  * `hit`                       -- measured at exactly this cell's position
-  * `measured_at_other_position` -- this feature was measured, but its peak_step
-                                    moved with the floor, so no row exists here
-  * `not_measured`              -- never entered the measurement set at all
-  * `measurement_failed`        -- dispatched and errored (see `failures`)
-
-Only the last is a defect. The second is a property of the sweep and is the
-reason `peak_step`-vs-`first_step` stability is worth reporting.
+"""Threshold sensitivity and feature-selection controls. GPU-free join against
+tracing.py's output.
 
     python experiment/threshold_sensitivity.py --size 4b
     python experiment/threshold_sensitivity.py --size 4b --slugs realm ten

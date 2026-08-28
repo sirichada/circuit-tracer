@@ -1,40 +1,7 @@
-"""Shared tracing pipeline for all Gemma-3 sizes.
-
-`tracing-{270m,1b,4b}.py` supply only their config and call `run()` here.
-Keeping one copy is what stops `RHYME_TOKEN` / `GRAPH_DIR` / the checkpoint
-names from going stale in three places at once.
-
-Two halves:
-
-  * `analyze_prompt()` and everything it calls is **pure** -- graph JSON in,
-    statistics out. No model, no GPU. Run it anywhere.
-  * `run_interventions()` needs the model on a GPU.
-
-**All GPU work in the experiment lives here.** `threshold_sensitivity.py` used
-to load a model of its own to measure near-misses and the matched control; it no
-longer does. This module measures the union of every population any downstream
-analysis needs -- shipped candidates, the loosest-grid-cell superset,
-near-misses, and the matched control -- in one model load per size, tags
-each row with the populations it belongs to, and lets the analysis side re-slice
-without re-measuring.
-
-Positions, not steps
---------------------
-The second element of an intervention tuple is a **token index into the
-tokenized input**, not a generation step. Suppression positions come from
-`step_contexts()`, which reads `metadata.prompt_tokens` out of the graph JSON:
-step *i*'s feature sits at position `ntok_i - 1`. This was measured across
-4B/1B/270M x {realm, ten, original}: `ntok` is exactly linear in the step, each
-step's tokens are a strict prefix-extension of step 0's, and 99.0-100% of
-transcoder nodes sit at `ctx_idx == ntok - 1`. Every derived position is checked
-against the node's own recorded `ctx_idx`.
-
-Per-prompt rhyme targets come from `rhyme_labels.json` (produced by
-`rhyme_labels.py`), never from hardcoded constants.
+"""Shared tracing pipeline for all Gemma-3 sizes, called by tracing-{270m,1b,4b}.py.
 
     python experiment/tracing-1b.py                    # analysis + interventions
     python experiment/tracing-1b.py --no-interventions # GPU-free half only
-    python experiment/tracing-1b.py --slugs realm ten  # selected prompts
 """
 
 from __future__ import annotations
@@ -664,12 +631,11 @@ def build_measurement_set(
 ) -> tuple[list[dict], dict]:
     """One deduplicated row per (layer, feat, position) across every population.
 
-    Roughly half of all candidates have `first_step == peak_step` (50.8%, measured
-    over 4B/1B/270M x 4 slugs, n=2560), so looping the two step keys blindly meant
-    measuring the identical intervention at the identical position twice. Rows are
-    keyed by position and tagged with every `(population, step_key)` that produced
-    them, which covers both conditions over the full population at ~75% of the
-    forward passes.
+    Roughly half of all candidates have `first_step == peak_step`, so looping
+    the two step keys blindly meant measuring the identical intervention at
+    the identical position twice. Rows are keyed by position and tagged with
+    every `(population, step_key)` that produced them, which covers both
+    conditions over the full population at ~75% of the forward passes.
 
     Returns (rows, diagnostics). Diagnostics record ctx_idx agreement: the derived
     position is `ntok_step - 1`, and the node's own `ctx_idx` is an independent
@@ -956,16 +922,14 @@ def load_model(cfg: SizeConfig, dtype=None):
     **Defaults to float32, not bf16, and that is a measurement decision.**
     bf16 carries 8 significand bits, so near a target logit of ~27 the
     representable spacing is 2**4 * 2**-7 = 0.125. Every logit the measurement
-    reads is therefore a multiple of 0.125, and `logit_drop` inherits that grid.
-    On the first real run (270M/`inspire`) this censored the result: 69 of 78
-    candidates came back at *exactly* 0.0, which does not mean "no effect" but
-    "smaller than the numerical resolution". A mean over a column that is 88%
-    hard zeros is measuring rounding.
+    reads is therefore a multiple of 0.125, and `logit_drop` inherits that
+    grid: a small suppression effect can round to exactly 0.0, which means
+    "smaller than the numerical resolution", not "no effect". A mean over a
+    column with many such hard zeros is measuring rounding.
 
-    fp32 costs ~2x memory for the same model. 270M and 1B fit comfortably; 4B in
-    fp32 needs ~16GB of weights and wants the H100 rather than a 12GB card. Pass
-    `--dtype bfloat16` to opt back out, but treat any `logit_drop` quantised to
-    0.125 as a lower bound rather than a measurement.
+    fp32 costs ~2x memory for the same model. Pass `--dtype bfloat16` to opt
+    back out, but treat any `logit_drop` quantised to 0.125 as a lower bound
+    rather than a measurement.
     """
     import torch
     from huggingface_hub import hf_hub_download
