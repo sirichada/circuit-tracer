@@ -1,14 +1,6 @@
-"""Does the chat prefix change what the model generates?
+"""Does the chat prefix change what the model generates? Standalone diagnostic.
 
-Standalone diagnostic, not part of the main five-stage pipeline. Runs free
-greedy generation from scratch under both the bare prompt and
-`CHAT_PREFIX + prompt`, same prompts/stop rule/labeller, and reports the
-rhyme rate under each frame plus an exact McNemar test over the paired result.
-
-    python experiment/chat_prefix_frame_check.py --size 4b            # the one worth running
     python experiment/chat_prefix_frame_check.py --size 4b --loader replacement
-
-No transcoders and no attribution: this is base-model greedy decoding only.
 """
 
 from __future__ import annotations
@@ -50,7 +42,7 @@ RHYMED = {"rhyme", "near_rhyme"}
 MAX_STEPS = 20  # matches generation-gemma-3-*.py
 PROMPT_SET_PATH = REPO / "tools" / "prompt_set.json"
 LABELS_PATH = REPO / "experiment" / "rhyme_labels.json"
-OUT_PATH = REPO / "results" / "j2_frame_check_{size}.json"
+OUT_PATH = REPO / "experiment" / "chat_prefix" / "chat_prefix_frame_check_{size}.json"
 
 
 def load_model(size: str, loader: str):
@@ -306,6 +298,7 @@ def main() -> None:
         print("\nnote: no rhyme_labels.json on disk, cross-check skipped.")
 
     out = Path(str(OUT_PATH).format(size=args.size))
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({
         "size": args.size,
         "loader": args.loader,

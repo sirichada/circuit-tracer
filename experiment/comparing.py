@@ -1,25 +1,8 @@
 """Cross-model comparison over the 11-prompt grid.
 
-Reads the per-prompt outputs of the tracing stage
-(`circuit_tracing_results_{size}_{slug}.json`) and reports how planning-feature
-structure varies with model size and with rhyme availability.
-
-Two things this deliberately does NOT do:
-
-* It never intersects feature indices across model sizes. 270M/1B/4B use
-  separately-trained transcoders (`gemma-scope-2-{size}-it`), so feature k in
-  one has no relation to feature k in another, and the differing layer counts
-  (18/26/34) would bias any such intersection toward low layers. Feature
-  persistence is reported WITHIN a size, across prompts, where the transcoder
-  is fixed and the indices mean the same thing.
-
-* It does not filter to rhyming prompts. Every statistic is split by rhyme
-  label, so 270M's 0/11 stays visible as a measured negative rather than an
-  empty table.
-
-    python experiment/comparing.py                    # all sizes on disk
-    python experiment/comparing.py --sizes 270m 1b    # selected sizes
-    python experiment/comparing.py --labels rhyme     # headline subset only
+    python experiment/comparing.py
+    python experiment/comparing.py --sizes 270m 1b
+    python experiment/comparing.py --labels rhyme
 """
 
 from __future__ import annotations
@@ -81,7 +64,12 @@ def load_all(sizes: list[str]) -> tuple[dict[tuple[str, str], dict], dict[str, i
     return results, rhymes_all
 
 
-MARKERS = ("excludes_last_layer", "selection_percentile_population")
+MARKERS = (
+    "excludes_last_layer",
+    "selection_percentile_population",
+    "grid_calibration_marker",
+    "control_matching_version",
+)
 
 
 def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
@@ -391,7 +379,7 @@ def section_suppression(results, sizes, labels) -> dict:
                 continue
 
             entry: dict = {}
-            for pop in ("candidate", "superset", "near_miss", "random_control"):
+            for pop in ("candidate", "superset", "near_miss", "matched_control"):
                 sub = [r for r in measured if pop in r.get("populations", [])]
                 if not sub:
                     continue
@@ -414,7 +402,7 @@ def section_suppression(results, sizes, labels) -> dict:
                     }
 
             cand = entry.get("candidate", {})
-            ctrl = entry.get("random_control", {})
+            ctrl = entry.get("matched_control", {})
             ck = cand.get(f"mean_logit_drop_top{FIXED_K}")
             rk = ctrl.get(f"mean_logit_drop_top{FIXED_K}")
             if ck is not None:

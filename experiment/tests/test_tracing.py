@@ -39,6 +39,21 @@ RHYME_STEP = 4
 # dedicated tests below instead of by silently reshaping the golden populations.
 N_LAYERS = 6
 
+FIXTURE_INFLUENCE_THRESHOLD = 0.001
+FIXTURE_CANDIDATE_MIN_SUSTAIN = 0.3
+
+
+@pytest.fixture(autouse=True)
+def pin_calibrated_constants(monkeypatch):
+    """These fixtures encode a fixed story (which feature is a planning
+    candidate, a near miss, etc.) against fixed cutoffs. `tracing`'s real
+    cutoffs come from `grid_calibration.json` now, which is data-dependent and
+    can change on recalibration -- pinning here keeps the golden tests from
+    breaking on a recalibration that has nothing to do with pipeline mechanics.
+    """
+    monkeypatch.setattr(tracing, "INFLUENCE_THRESHOLD", FIXTURE_INFLUENCE_THRESHOLD)
+    monkeypatch.setattr(tracing, "CANDIDATE_MIN_SUSTAIN", FIXTURE_CANDIDATE_MIN_SUSTAIN)
+
 
 def make_node(layer: int, feat: int, influence: float, ctx_idx: int) -> dict:
     return {
@@ -51,6 +66,27 @@ def make_node(layer: int, feat: int, influence: float, ctx_idx: int) -> dict:
         "influence": influence,
         "ctx_idx": ctx_idx,
     }
+
+
+def make_error_node(influence: float, ctx_idx: int) -> dict:
+    return {"feature_type": "mlp reconstruction error", "influence": influence, "ctx_idx": ctx_idx}
+
+
+ERROR_KEY = "error"
+
+
+def cumulative_shares(magnitudes: dict) -> dict:
+    """Real graphs store `influence` as a cumulative share (see
+    `load_raw_step_nodes`), not a magnitude -- fixtures have to be encoded the
+    same way or they exercise a data model the pipeline never actually sees.
+    """
+    ordered = sorted(magnitudes, key=lambda k: -magnitudes[k])
+    total = sum(magnitudes.values())
+    out, running = {}, 0.0
+    for key in ordered:
+        running += magnitudes[key]
+        out[key] = running / total
+    return out
 
 
 @pytest.fixture
@@ -72,11 +108,15 @@ def slug_dir(tmp_path):
     }
     for step in range(N_STEPS):
         ntok = BASE_NTOK + step
-        nodes = [
-            make_node(layer, feat, vals[step], ntok - 1)
-            for (layer, feat), vals in profiles.items()
-            if vals[step] > 0
-        ]
+        step_mags = {key: vals[step] for key, vals in profiles.items() if vals[step] > 0}
+        # Real graphs are always dominated by an `mlp reconstruction error` node,
+        # never a transcoder feature -- included here so the fixture exercises
+        # that invariant instead of silently assuming it away.
+        feature_keys = list(step_mags)
+        step_mags[ERROR_KEY] = 5.0
+        step_shares = cumulative_shares(step_mags)
+        nodes = [make_node(layer, feat, step_shares[(layer, feat)], ntok - 1) for (layer, feat) in feature_keys]
+        nodes.append(make_error_node(step_shares[ERROR_KEY], ntok - 1))
         payload = {
             "metadata": {
                 "prompt": "<bos><start_of_turn>user\n" + "w" * step,
@@ -147,7 +187,7 @@ def test_ctx_idx_is_carried_through(slug_dir):
 def test_execution_features_are_excluded_from_the_control_pool(slug_dir):
     """The hazard that the position fix created.
 
-    (2, 200) peaks at the rhyme step. Left in `rest`, the matched-random control
+    (2, 200) peaks at the rhyme step. Left in `rest`, the matched control
     could draw it, and its position would fall past the end of the measurement
     sequence -- an IndexError swallowed by the per-feature except, showing up
     only as an unexplained shortfall in n_measured.
@@ -220,7 +260,7 @@ def test_out_of_bounds_position_raises(slug_dir):
     execution = next(s for s in stats if s["feat_key"] == (2, 200))
     with pytest.raises(AssertionError, match="measurement length"):
         build_measurement_set(
-            {"random_control": [execution]},
+            {"matched_control": [execution]},
             contexts,
             collect_ctx_idx(step_features),
             RHYME_STEP,
@@ -234,6 +274,58 @@ def test_matched_control_is_deterministic_and_uncapped(slug_dir):
     a = sample_matched_control(pops["candidates"], pops["rest"], 0)
     b = sample_matched_control(pops["candidates"], pops["rest"], 0)
     assert [s["feat_key"] for s in a] == [s["feat_key"] for s in b]
+
+
+def test_matched_control_prefers_same_layer_over_closer_influence():
+    """Layer gap must dominate `rhyme_val` closeness in the match, or the whole
+    point of moving off binning (the remaining-depth confound) is lost.
+    """
+    candidate = {"feat_key": (5, 1), "rhyme_val": 0.50, "peak_step": 0}
+    same_layer_far_val = {"feat_key": (5, 2), "rhyme_val": 0.90, "peak_step": 0}
+    other_layer_close_val = {"feat_key": (2, 3), "rhyme_val": 0.51, "peak_step": 0}
+
+    control = sample_matched_control([candidate], [same_layer_far_val, other_layer_close_val], 0)
+
+    assert len(control) == 1
+    assert control[0]["feat_key"] == (5, 2)
+    assert control[0]["layer_gap"] == 0
+    assert control[0]["matched_candidate_key"] == (5, 1)
+
+
+def test_matched_control_reaches_the_achievable_zero_gap_count_under_contention():
+    """Two candidates want layer 5; only one same-layer partner exists.
+
+    A single-pass greedy would let whichever candidate is processed first claim
+    it, leaving the second stuck wherever nearest-neighbor lands -- but the
+    *count* of zero-gap matches achievable here is exactly 1 regardless of
+    order, so both candidates must still get matched (nothing here should be
+    dropped), and exactly one must land layer_gap == 0.
+    """
+    cand_a = {"feat_key": (5, 1), "rhyme_val": 0.50, "peak_step": 0}
+    cand_b = {"feat_key": (5, 2), "rhyme_val": 0.20, "peak_step": 0}
+    same_layer_partner = {"feat_key": (5, 9), "rhyme_val": 0.51, "peak_step": 0}
+    fallback_partner = {"feat_key": (4, 8), "rhyme_val": 0.19, "peak_step": 0}
+
+    control = sample_matched_control(
+        [cand_a, cand_b], [same_layer_partner, fallback_partner], seed=0
+    )
+
+    assert len(control) == 2
+    layer_gaps = sorted(s["layer_gap"] for s in control)
+    assert layer_gaps == [0, 1]
+    matched_same_layer = next(s for s in control if s["layer_gap"] == 0)
+    assert matched_same_layer["feat_key"] == (5, 9)
+
+
+def test_matched_control_falls_back_to_nearest_layer_when_same_layer_is_exhausted():
+    candidate = {"feat_key": (5, 1), "rhyme_val": 0.50, "peak_step": 0}
+    nearest_layer = {"feat_key": (4, 2), "rhyme_val": 0.10, "peak_step": 0}
+    farther_layer = {"feat_key": (1, 3), "rhyme_val": 0.49, "peak_step": 0}
+
+    control = sample_matched_control([candidate], [farther_layer, nearest_layer], 0)
+
+    assert control[0]["feat_key"] == (4, 2)
+    assert control[0]["layer_gap"] == 1
 
 
 # ------------------------------------------------------- last-layer exclusion

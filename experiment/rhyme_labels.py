@@ -5,11 +5,6 @@ reconstructs what each model actually generated, finds the rhyme word, and
 scores it against the prompt's target using the CMUdict layer already built
 in `tools/prompt_set.py`.
 
-Emits `experiment/rhyme_labels.json`, which is `tracing.py`'s sole config
-source for each prompt's rhyme token and rhyme step.
-
-No model, no GPU, no network -- pure JSON parsing plus CMUdict.
-
     python experiment/rhyme_labels.py              # all sizes found on disk
     python experiment/rhyme_labels.py 1b 4b        # selected sizes
 """
@@ -311,7 +306,7 @@ def label_one(size: str, slug: str, slug_dir: Path, record: dict) -> Label:
     # has no well-defined rhyme word and must not be scored as one.
     if looped:
         label = "degenerate"
-        # rhyme_step is nulled so tracing.py skips this prompt (tracing.py:464).
+        # rhyme_step is nulled so tracing.py's run() skips this prompt.
         # Planning vs execution is defined relative to the rhyme step; with no
         # rhyme there is nothing to be early or late relative to.
         step = None

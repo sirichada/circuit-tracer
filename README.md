@@ -65,8 +65,8 @@ rhyme_labels.py
         ▼
 tracing.py  (+ tracing-{270m,1b,4b}.py config shims)
         │  all GPU work: builds feature timelines, classifies planning vs
-        │  execution features, measures candidate/superset/near-miss/random
-        │  populations with causal suppression
+        │  execution features, measures candidate/superset/near-miss/matched-
+        │  control populations with causal suppression
         │  outputs: experiment/tracing/circuit_tracing_results_{size}_{slug}.json
         ▼
 threshold_sensitivity.py
@@ -160,7 +160,7 @@ The second element of an intervention tuple is a **token index into the tokenize
 
 ### Load & filter graph files
 
-Reads every `step-NN-*.json` file per prompt slug. For each step, keeps transcoder nodes above the influence threshold and records `(layer, feature, influence)`.
+Reads every `step-NN-*.json` file per prompt slug. Each node's `influence` field in the JSON is a cumulative share (nodes sorted by real influence descending, running total divided by the total), not a per-node magnitude -- the most influential node gets the smallest value. Differencing adjacent values in ascending order recovers each node's own share first; only then are transcoder nodes kept above the influence threshold and recorded as `(layer, feature, influence)`.
 
 ### Normalize & build feature timeline
 
@@ -179,7 +179,7 @@ Features in the last layer are excluded outright (`feature_stats(n_layers=...)`)
 - **candidate** — shipped influence/percentile/sustain-ratio cutoffs
 - **superset** — the loosest cell of the threshold-sensitivity grid
 - **near_miss** — just below the candidate cutoffs
-- **random_control** — a matched random sample
+- **matched_control** — non-candidates nearest-neighbor matched to candidate influence
 
 There is no measurement cap on any of these — `POPULATION_CEILING` is a tripwire that raises rather than truncates, not a parameter to tune.
 
@@ -191,7 +191,7 @@ For each measured feature, suppress its activation to 0 at its recorded position
 
 Each prompt/size writes `experiment/tracing/circuit_tracing_results_{size}_{slug}.json` containing `config` (thresholds, band cutoffs, `excludes_last_layer`, `n_layers`, `code_version`), `statistics`, `candidates`, `early_spikes`, and `downstream_effects` (suppression results, keyed by population and step).
 
-**Pooling markers.** `config.selection_percentile_population` and `config.code_version` identify which methodology generation a result file belongs to. `comparing.py` checks these markers agree across every file in a pool before running any statistic, and raises if they don't — do not narrow `--sizes` to silence it, that just drops a size from the regression instead of fixing the mismatch.
+**Pooling markers.** `comparing.py::check_pooling_markers` checks four `config` fields (`excludes_last_layer`, `selection_percentile_population`, `grid_calibration_marker`, `control_matching_version`) agree across every file in a pool, and raises if they don't — do not narrow `--sizes` to silence it, that just drops a size from the regression instead of fixing the mismatch.
 
 ---
 
@@ -199,7 +199,7 @@ Each prompt/size writes `experiment/tracing/circuit_tracing_results_{size}_{slug
 
 **File:** `threshold_sensitivity.py`
 
-GPU-free — a pure join against `tracing.py`'s already-measured populations, so it doesn't load a model itself. Sweeps `INFLUENCE_GRID` / `PERCENTILE_GRID` / `SUSTAIN_GRID` (defined in `tracing.py`, since the loosest cell is what sizes the superset that has to be measured upstream) and reports, per grid cell, one of `hit` / `measured_at_other_position` / `not_measured` / `measurement_failed` — only the last is a defect; the first three are distinguishable causes of sweep coverage.
+GPU-free — a pure join against `tracing.py`'s already-measured populations, so it doesn't load a model itself. Sweeps `INFLUENCE_GRID` / `PERCENTILE_GRID` / `SUSTAIN_GRID` (defined in `tracing.py` and loaded from `grid_calibration.json`, since the loosest cell is what sizes the superset that has to be measured upstream) and reports, per grid cell, one of `hit` / `measured_at_other_position` / `not_measured` / `measurement_failed` — only the last is a defect; the first three are distinguishable causes of sweep coverage.
 
 Writes `experiment/threshold/threshold_sensitivity_{size}_{slug}.json`.
 
