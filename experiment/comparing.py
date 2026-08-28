@@ -81,7 +81,12 @@ def load_all(sizes: list[str]) -> tuple[dict[tuple[str, str], dict], dict[str, i
     return results, rhymes_all
 
 
-MARKERS = ("excludes_last_layer", "selection_percentile_population", "grid_calibration_marker")
+MARKERS = (
+    "excludes_last_layer",
+    "selection_percentile_population",
+    "grid_calibration_marker",
+    "control_matching_version",
+)
 
 
 def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:
@@ -391,7 +396,7 @@ def section_suppression(results, sizes, labels) -> dict:
                 continue
 
             entry: dict = {}
-            for pop in ("candidate", "superset", "near_miss", "random_control"):
+            for pop in ("candidate", "superset", "near_miss", "matched_control"):
                 sub = [r for r in measured if pop in r.get("populations", [])]
                 if not sub:
                     continue
@@ -414,7 +419,7 @@ def section_suppression(results, sizes, labels) -> dict:
                     }
 
             cand = entry.get("candidate", {})
-            ctrl = entry.get("random_control", {})
+            ctrl = entry.get("matched_control", {})
             ck = cand.get(f"mean_logit_drop_top{FIXED_K}")
             rk = ctrl.get(f"mean_logit_drop_top{FIXED_K}")
             if ck is not None:

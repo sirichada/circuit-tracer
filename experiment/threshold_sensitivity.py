@@ -7,7 +7,7 @@ generically high-influence?" in three parts:
      `n_candidates` and the top suppression effects move.
   2. **Near-miss**: features that fail the candidate filter by a small margin.
      If they move the rhyme probability, the cutoff is discarding real signal.
-  3. **Random control**: non-candidate features matched to the candidate set's
+  3. **Matched control**: non-candidate features matched to the candidate set's
      influence distribution. If they move it just as much, the selection isn't
      distinguishing anything.
 
@@ -101,6 +101,12 @@ class Measurements:
         self.positions_by_feat: dict[tuple[int, int], set[int]] = {}
         self.failed: set[tuple[int, int, int]] = set()
         self.rows: list[dict] = []
+        # The pairing `sample_matched_control` computed when this file was
+        # written -- reading it back is what makes `paired_difference`
+        # reproduce the pairing `tracing.py` actually measured, rather than
+        # re-deriving one that could silently differ across a code or seed
+        # change between when this file was written and when it's read.
+        self.raw_matched_control = (payload or {}).get("matched_control")
 
         section = (payload or {}).get("interventions")
         if not isinstance(section, dict) or "results" not in section:
@@ -305,8 +311,92 @@ def permutation_test(a: list[float], b: list[float], seed: int, n: int = 10000) 
     return (hits + 1) / (n + 1)
 
 
+def resolve_control_pairing(
+    pops: dict, measured: Measurements, seed: int
+) -> tuple[list[dict], bool]:
+    """The control set `tracing.py` actually measured, read back from the file
+    rather than re-derived, plus whether that read succeeded.
+
+    A live recompute reproduces the pairing only as long as the matcher, the
+    seed, and the upstream populations are unchanged between when the result
+    file was written and when this runs -- not a safe assumption once
+    `tracing.py` and `threshold_sensitivity.py` can run at different commits on
+    different machines. Falls back to recomputing only when the file predates
+    this field (an older result), and says so.
+    """
+    raw = measured.raw_matched_control
+    if raw is not None and all("layer_gap" in r and "matched_candidate_key" in r for r in raw):
+        control = []
+        for r in raw:
+            row = dict(r)
+            row["feat_key"] = (row["layer"], row["feat"])
+            row["matched_candidate_key"] = tuple(row["matched_candidate_key"])
+            control.append(row)
+        return control, True
+
+    return sample_matched_control(pops["candidates"], pops["rest"], seed), False
+
+
+def paired_difference(
+    candidates: list[dict], control: list[dict], contexts: dict[int, dict], measured: Measurements
+) -> dict:
+    """Mean `logit_drop` difference over same-layer matched pairs only.
+
+    A difference of pooled means is only as good as the matching that produced
+    the two groups; a same-layer paired difference makes the remaining-depth
+    confound cancel by construction for every pair that has one, rather than
+    relying on the match being adequate.
+
+    Fixes on `peak_step` for both sides, matching `run_sweep`'s convention --
+    not `first_step`, which this codebase treats as a deliberately deferred
+    choice elsewhere (`build_measurement_set` measures both, `by_step_key`
+    reports both). Not revisited here; a `first_step` paired variant would need
+    the same treatment if this becomes primary.
+
+    Every candidate is accounted for under exactly one of four buckets, so the
+    counts sum to `len(candidates)`: paired (`n_pairs`), matched to a different
+    layer (`n_layer_gap` -- `rest` had no same-layer feature left), matched to
+    nothing at all (`n_no_control` -- `rest` was exhausted), or matched but one
+    side's suppression measurement is missing (`n_unmeasured`). Collapsing
+    these into one "unpairable" count hid which cause was actually in play on
+    a real run (see the 1B/`realm` investigation this function's diagnostics
+    were added to answer) -- that number has to be readable on the H100 run.
+    """
+    cand_by_key = {c["feat_key"]: c for c in candidates}
+    control_by_cand_key = {ctrl["matched_candidate_key"]: ctrl for ctrl in control}
+
+    diffs = []
+    n_layer_gap = n_no_control = n_unmeasured = 0
+    for cand_key, cand in cand_by_key.items():
+        ctrl = control_by_cand_key.get(cand_key)
+        if ctrl is None:
+            n_no_control += 1
+            continue
+        if ctrl.get("layer_gap") != 0:
+            n_layer_gap += 1
+            continue
+        cand_step, ctrl_step = cand["peak_step"], ctrl["peak_step"]
+        if cand_step not in contexts or ctrl_step not in contexts:
+            n_unmeasured += 1
+            continue
+        _, cand_hit = measured.classify(*cand["feat_key"], contexts[cand_step]["position"])
+        _, ctrl_hit = measured.classify(*ctrl["feat_key"], contexts[ctrl_step]["position"])
+        if cand_hit is None or ctrl_hit is None:
+            n_unmeasured += 1
+            continue
+        diffs.append(cand_hit["logit_drop"] - ctrl_hit["logit_drop"])
+
+    return {
+        "n_pairs": len(diffs),
+        "n_layer_gap": n_layer_gap,
+        "n_no_control": n_no_control,
+        "n_unmeasured": n_unmeasured,
+        "mean_paired_logit_drop_diff": statistics.fmean(diffs) if diffs else None,
+    }
+
+
 def compare(groups: dict[str, list[dict]], seed: int) -> dict:
-    """Candidates against the matched-random control, on the logit metric.
+    """Candidates against the matched control, on the logit metric.
 
     The previous version located the candidate **mean** inside a distribution of
     random **individual** drops -- mismatched units, so the resulting percentile
@@ -325,14 +415,14 @@ def compare(groups: dict[str, list[dict]], seed: int) -> dict:
         for name, rows in per_feature.items()
     }
     cand = [r["logit_drop"] for r in per_feature.get("candidate", [])]
-    rand = [r["logit_drop"] for r in per_feature.get("random_control", [])]
-    if cand and rand:
-        means = bootstrap_means(rand, seed)
-        out["candidate_vs_random"] = {
+    ctrl = [r["logit_drop"] for r in per_feature.get("matched_control", [])]
+    if cand and ctrl:
+        means = bootstrap_means(ctrl, seed)
+        out["candidate_vs_matched_control"] = {
             "metric": "logit_drop",
-            "diff_of_means": statistics.fmean(cand) - statistics.fmean(rand),
-            "permutation_p": permutation_test(cand, rand, seed),
-            "random_mean_ci95": [
+            "diff_of_means": statistics.fmean(cand) - statistics.fmean(ctrl),
+            "permutation_p": permutation_test(cand, ctrl, seed),
+            "matched_control_mean_ci95": [
                 means[int(0.025 * len(means))],
                 means[int(0.975 * len(means)) - 1],
             ],
@@ -372,7 +462,9 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
     stats = feature_stats(timeline, percentiles, rhyme_step, cfg.n_layers)
     rhyme_step_features = {(r["layer"], r["feat"]) for r in step_features.get(rhyme_step, [])}
     pops = split_populations(stats, rhyme_step_features, rhyme_step)
-    control_selected = sample_matched_control(pops["candidates"], pops["rest"], RANDOM_SEED)
+    control_selected, control_from_file = resolve_control_pairing(pops, measured, RANDOM_SEED)
+    if measured.available and not control_from_file:
+        print(f"  [{cfg.size}/{slug}] matched_control pairing not in result file -- recomputed")
 
     results: dict[str, Any] = {
         "config": {
@@ -425,12 +517,12 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
         )
 
     if not measured.available:
-        for key in ("candidate_baseline", "near_miss", "random_control", "comparison"):
+        for key in ("candidate_baseline", "near_miss", "matched_control", "comparison"):
             results[key] = {"skipped": "no measurements available"}
         return results
 
     groups = {
-        name: measured.population(name) for name in ("candidate", "near_miss", "random_control")
+        name: measured.population(name) for name in ("candidate", "near_miss", "matched_control")
     }
     results["candidate_baseline"] = {
         "results": groups["candidate"],
@@ -440,15 +532,18 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
         "results": groups["near_miss"],
         "summary": summarize(groups["near_miss"], len(pops["near_misses"])),
     }
-    results["random_control"] = {
+    results["matched_control"] = {
         "seed": seed,
-        "results": groups["random_control"],
+        "results": groups["matched_control"],
         # Recomputed, not counted from the measured rows: the draw is
         # deterministic given the seed, so this is the same set tracing.py
         # measured and makes the coverage check meaningful rather than tautological.
-        "summary": summarize(groups["random_control"], len(control_selected)),
+        "summary": summarize(groups["matched_control"], len(control_selected)),
     }
     results["comparison"] = compare(groups, seed)
+    results["comparison"]["paired_same_layer"] = paired_difference(
+        pops["candidates"], control_selected, contexts, measured
+    )
     # Both suppression points, reported side by side; neither is designated
     # primary here. `first_step` is defined against INFLUENCE_THRESHOLD and so
     # drifts as the sweep varies it -- the `measured_at_other_position` counts in
@@ -460,12 +555,18 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
         for key in STEP_KEYS
     }
 
-    cmp_block = results["comparison"].get("candidate_vs_random")
+    cmp_block = results["comparison"].get("candidate_vs_matched_control")
     if cmp_block:
         print(
-            f"  candidate vs random: diff={cmp_block['diff_of_means']:+.4f} logit  "
+            f"  candidate vs matched control: diff={cmp_block['diff_of_means']:+.4f} logit  "
             f"p={cmp_block['permutation_p']}"
         )
+    paired = results["comparison"]["paired_same_layer"]
+    print(
+        f"  paired (same layer): n_pairs={paired['n_pairs']}  layer_gap={paired['n_layer_gap']}  "
+        f"no_control={paired['n_no_control']}  unmeasured={paired['n_unmeasured']}  "
+        f"mean_diff={paired['mean_paired_logit_drop_diff']}"
+    )
     return results
 
 

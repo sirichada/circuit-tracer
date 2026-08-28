@@ -11,10 +11,10 @@ Two halves:
   * `run_interventions()` needs the model on a GPU.
 
 **All GPU work in the experiment lives here.** `threshold_sensitivity.py` used
-to load a model of its own to measure near-misses and the random control; it no
+to load a model of its own to measure near-misses and the matched control; it no
 longer does. This module measures the union of every population any downstream
 analysis needs -- shipped candidates, the loosest-grid-cell superset,
-near-misses, and the matched-random control -- in one model load per size, tags
+near-misses, and the matched control -- in one model load per size, tags
 each row with the populations it belongs to, and lets the analysis side re-slice
 without re-measuring.
 
@@ -42,6 +42,7 @@ from __future__ import annotations
 import json
 import random
 import re
+import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -60,6 +61,11 @@ RESULTS_DIR = EXPERIMENT / "tracing"
 CANDIDATE_MIN_RHYME_PERCENTILE = 50.0
 EARLY_SPIKE_PERCENTILE = 70.0  # descriptive only -- undefended and unswept
 TOP_N_REPORTED = 15
+# Bump when `sample_matched_control`'s algorithm changes: it determines which
+# features get drawn as `matched_control`, so a pooling marker is needed the
+# same way `grid_calibration_marker` is -- a different matcher answers a
+# different question even at an unchanged seed.
+CONTROL_MATCHING_VERSION = 2
 
 # --- sweep grids -------------------------------------------------------------
 # Defined here rather than in threshold_sensitivity.py because the *loosest* cell
@@ -422,7 +428,7 @@ def select_candidates(planning: list[dict], rhyme_step_features: set) -> list[di
 def split_populations(stats: list[dict], rhyme_step_features: set, rhyme_step: int) -> dict:
     """Partition rhyme-step features into candidates / near-misses / the rest.
 
-    The three groups are disjoint by construction, so the random control can never
+    The three groups are disjoint by construction, so the matched control can never
     accidentally draw a feature the candidate filter nearly kept.
 
     **Execution features are excluded from all three.** They peak at or after the
@@ -479,12 +485,28 @@ def split_populations(stats: list[dict], rhyme_step_features: set, rhyme_step: i
 
 
 def sample_matched_control(candidates: list[dict], rest: list[dict], seed: int) -> list[dict]:
-    """Draw non-candidates matched to the candidate set's `rhyme_val` distribution.
+    """Two-pass nearest-neighbor match: exact-layer partners first, then the
+    closest unused `rest` feature by (|layer gap|, |rhyme_val gap|) for whoever
+    is left. Reaches the maximum achievable number of zero-layer-gap pairs
+    (`sum over layers of min(#candidates, #rest)` at that layer) -- doing this
+    in one pass would let a candidate with alternatives claim a scarce layer's
+    only partner ahead of a candidate that has none.
 
-    Sampling uniformly from `rest` would stack the comparison: most non-candidates sit
-    near zero influence, so they'd fail to move anything for reasons that have nothing
-    to do with the selection filter. Matching on influence decile makes the control
-    answer the question actually being asked.
+    Binning by `rhyme_val` decile alone (the previous approach) is layer-blind,
+    and candidates concentrate late in the network -- a layer-blind draw pulls
+    the control toward whatever `rest` happens to contain, not toward
+    candidates' actual depth, which confounds the comparison with the
+    remaining-depth effect (`feature_stats`'s last-layer exclusion is the
+    provable extreme of the same quantity: less network left above a feature
+    means less room for its suppression to matter). Nearest-neighbor without
+    replacement degrades gracefully when the same layer runs out -- it reaches
+    to the next-closest layer -- instead of falling back to an influence-only
+    draw, which is what let a binning backfill undo the matching it was
+    supposed to complete.
+
+    Each returned feature carries `matched_candidate_key` (which candidate it
+    was matched to) and `layer_gap`, so downstream analysis can report how well
+    matched the draw actually was instead of assuming it.
 
     `rest` is already restricted to `peak_step < rhyme_step` by `split_populations`,
     so every drawn feature has an in-range suppression position.
@@ -492,41 +514,77 @@ def sample_matched_control(candidates: list[dict], rest: list[dict], seed: int) 
     if not candidates or not rest:
         return []
 
-    edges = sorted(c["rhyme_val"] for c in candidates)
-    n_bins = 10
-
-    def bin_of(val: float) -> int:
-        lo, hi = edges[0], edges[-1]
-        if hi <= lo:
-            return 0
-        return min(n_bins - 1, int(n_bins * (val - lo) / (hi - lo))) if lo <= val <= hi else -1
-
-    pool: dict[int, list[dict]] = defaultdict(list)
-    for s in rest:
-        pool[bin_of(s["rhyme_val"])].append(s)
-
-    wanted: dict[int, int] = defaultdict(int)
-    for c in candidates:
-        wanted[bin_of(c["rhyme_val"])] += 1
-
     rng = random.Random(seed)
-    drawn: list[dict] = []
-    shortfall = 0
-    for b, n in sorted(wanted.items()):
-        available = pool.get(b, [])
-        take = min(n, len(available))
-        drawn.extend(rng.sample(available, take))
-        shortfall += n - take
+    order = list(range(len(candidates)))
+    rng.shuffle(order)
+    available = list(rest)
+    rng.shuffle(available)  # ties broken by this fixed order, not re-randomized per lookup
 
-    # Backfill from the nearest populated bins so the control isn't silently smaller
-    # than the candidate set, which would make the two means incomparable.
-    if shortfall:
-        used = {id(s) for s in drawn}
-        spare = [s for s in rest if id(s) not in used]
-        spare.sort(key=lambda s: -s["rhyme_val"])
-        drawn.extend(spare[:shortfall])
+    # Pass 1: exact-layer matches only, one per candidate from its own layer's
+    # bucket. Doing this before the nearest-neighbor pass reaches the maximum
+    # number of zero-gap pairs regardless of candidate processing order --
+    # running greedy nearest-neighbor in one pass lets a candidate with
+    # alternatives claim a scarce layer's only same-layer partner ahead of a
+    # candidate that has no alternative, understating achievable exact matches.
+    by_layer: dict[int, list[dict]] = defaultdict(list)
+    for s in available:
+        by_layer[s["feat_key"][0]].append(s)
+
+    drawn: list[dict] = []
+    leftover_order: list[int] = []
+    for i in order:
+        c = candidates[i]
+        bucket = by_layer.get(c["feat_key"][0])
+        if bucket:
+            bucket.sort(key=lambda s: abs(s["rhyme_val"] - c["rhyme_val"]))
+            match = dict(bucket.pop(0))
+            match["matched_candidate_key"] = c["feat_key"]
+            match["layer_gap"] = 0
+            drawn.append(match)
+        else:
+            leftover_order.append(i)
+
+    # Pass 2: nearest-neighbor over whatever's left, for candidates pass 1
+    # couldn't give an exact-layer match.
+    still_available = [s for bucket in by_layer.values() for s in bucket]
+    for i in leftover_order:
+        if not still_available:
+            break
+        c = candidates[i]
+        c_layer, c_val = c["feat_key"][0], c["rhyme_val"]
+        best_idx = min(
+            range(len(still_available)),
+            key=lambda j: (
+                abs(still_available[j]["feat_key"][0] - c_layer),
+                abs(still_available[j]["rhyme_val"] - c_val),
+            ),
+        )
+        match = dict(still_available.pop(best_idx))
+        match["matched_candidate_key"] = c["feat_key"]
+        match["layer_gap"] = abs(match["feat_key"][0] - c_layer)
+        drawn.append(match)
 
     return drawn
+
+
+def control_match_diagnostics(candidates: list[dict], control: list[dict], n_layers: int) -> dict:
+    """How well `sample_matched_control`'s draw actually matches candidates on
+    depth, reported rather than assumed. `remaining_depth` is measurable layers
+    left above a feature -- 0 at the deepest layer `feature_stats` still admits.
+    """
+
+    def remaining_depth(feat_key: tuple[int, int]) -> int:
+        return (n_layers - 2) - feat_key[0]
+
+    cand_depths = [remaining_depth(c["feat_key"]) for c in candidates]
+    ctrl_depths = [remaining_depth(s["feat_key"]) for s in control]
+    return {
+        "n_candidates": len(candidates),
+        "n_control": len(control),
+        "mean_remaining_depth_candidates": statistics.fmean(cand_depths) if cand_depths else None,
+        "mean_remaining_depth_control": statistics.fmean(ctrl_depths) if ctrl_depths else None,
+        "mean_layer_gap": statistics.fmean(s["layer_gap"] for s in control) if control else None,
+    }
 
 
 def find_early_spikes(percentiles: dict, stats_by_key: dict) -> list[dict]:
@@ -733,6 +791,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
 
     pops = split_populations(stats, rhyme_step_features, rhyme_step)
     control = sample_matched_control(pops["candidates"], pops["rest"], RANDOM_SEED)
+    control_diagnostics = control_match_diagnostics(pops["candidates"], control, cfg.n_layers)
 
     # The loosest grid cell. Containment of the shipped set is *usual, not
     # guaranteed*: `rhyme_percentile` is monotonic in the influence floor, but
@@ -759,7 +818,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
         "candidate": pops["candidates"],
         "superset": superset,
         "near_miss": pops["near_misses"],
-        "random_control": control,
+        "matched_control": control,
     }
     for name, entries in measurement_populations.items():
         if len(entries) > POPULATION_CEILING:
@@ -831,6 +890,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             "excludes_last_layer": True,
             "selection_percentile_population": "measurable",
             "grid_calibration_marker": CALIBRATION["corpus_marker"],
+            "control_matching_version": CONTROL_MATCHING_VERSION,
             "code_version": code_version(),
             "step_keys": list(STEP_KEYS),
             "grids": {
@@ -856,11 +916,12 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             "n_candidates": len(candidates),
             "n_early_spikes": len(spikes),
             "band_counts": {k: len(v) for k, v in bands.items()},
+            "control_match_diagnostics": control_diagnostics,
         },
         "population_counts": {
             **{k: len(v) for k, v in pops.items()},
             "superset": len(superset),
-            "random_control": len(control),
+            "matched_control": len(control),
             "measurement_rows": len(measurement_rows),
         },
         "position_diagnostics": position_diagnostics,
@@ -871,7 +932,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
         "candidates": _serialize(candidates),
         "superset": _serialize(superset),
         "near_misses": _serialize(pops["near_misses"]),
-        "random_control": _serialize(control),
+        "matched_control": _serialize(control, extra=("layer_gap", "matched_candidate_key")),
         "early_spikes": _serialize(spikes, extra=("early_spike_step",)),
         "measurement_rows": measurement_rows,
         "steps": [
@@ -1118,7 +1179,7 @@ def run_interventions(model, tokenizer, device, cfg, slug, label, results) -> di
                 pop: analyze_downstream_effects([r for r in measured if pop in r["populations"]])[
                     "aggregate"
                 ]
-                for pop in ("candidate", "superset", "near_miss", "random_control")
+                for pop in ("candidate", "superset", "near_miss", "matched_control")
             },
             "by_step_key": {
                 key: analyze_downstream_effects([r for r in measured if key in r["step_keys"]])[
