@@ -15,12 +15,16 @@ LOGDIR="./logs"
 mkdir -p "$LOGDIR"
 TS=$(date +%Y%m%d_%H%M%S)
 
-declare -A SCRIPTS=(
-    [270m]="tracing-270m.py"
-    [1b]="tracing-1b.py"
-    [4b]="tracing-4b.py"
-)
 DEFAULT_ORDER=(270m 1b 4b)
+
+script_for() {
+    case "$1" in
+        270m) echo "tracing-270m.py" ;;
+        1b) echo "tracing-1b.py" ;;
+        4b) echo "tracing-4b.py" ;;
+        *) echo "" ;;
+    esac
+}
 
 run_stage() {
     local name="$1"
@@ -40,9 +44,9 @@ fi
 
 overall_status=0
 for name in "${stages[@]}"; do
-    script="${SCRIPTS[$name]:-}"
+    script="$(script_for "$name")"
     if [ -z "$script" ]; then
-        echo "Unknown stage '$name' — expected one of: ${!SCRIPTS[*]}" >&2
+        echo "Unknown stage '$name' — expected one of: ${DEFAULT_ORDER[*]}" >&2
         overall_status=1
         continue
     fi

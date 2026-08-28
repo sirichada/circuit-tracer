@@ -160,7 +160,7 @@ The second element of an intervention tuple is a **token index into the tokenize
 
 ### Load & filter graph files
 
-Reads every `step-NN-*.json` file per prompt slug. For each step, keeps transcoder nodes above the influence threshold and records `(layer, feature, influence)`.
+Reads every `step-NN-*.json` file per prompt slug. Each node's `influence` field in the JSON is a cumulative share (nodes sorted by real influence descending, running total divided by the total), not a per-node magnitude -- the most influential node gets the smallest value. Differencing adjacent values in ascending order recovers each node's own share first; only then are transcoder nodes kept above the influence threshold and recorded as `(layer, feature, influence)`.
 
 ### Normalize & build feature timeline
 
