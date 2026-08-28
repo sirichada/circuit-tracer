@@ -49,9 +49,11 @@ from pathlib import Path
 from typing import Any
 
 from tracing import (
+    CALIBRATION,
     CANDIDATE_MIN_RHYME_PERCENTILE,
     CANDIDATE_MIN_SUSTAIN,
     CONFIGS,
+    GRID_CALIBRATION_PATH,
     INFLUENCE_GRID,
     INFLUENCE_THRESHOLD,
     LABELS_PATH,
@@ -470,11 +472,51 @@ def analyze_slug(cfg: SizeConfig, slug: str, label: dict, seed: int) -> dict:
 # --------------------------------------------------------------------------- entry
 
 
+def check_grid_is_informative(size: str, sweep_by_slug: dict[str, list[dict]]) -> None:
+    """At least one prompt's own sweep must show `n_candidates` moving along each
+    axis -- pooling rows across prompts would compare different prompts' baseline
+    counts instead of testing grid sensitivity.
+    """
+    if not sweep_by_slug:
+        return
+    shipped = {
+        "influence_threshold": INFLUENCE_THRESHOLD,
+        "min_sustain": CANDIDATE_MIN_SUSTAIN,
+        "min_rhyme_percentile": CANDIDATE_MIN_RHYME_PERCENTILE,
+    }
+    for axis, others in (
+        ("influence_threshold", ("min_sustain", "min_rhyme_percentile")),
+        ("min_sustain", ("influence_threshold", "min_rhyme_percentile")),
+        ("min_rhyme_percentile", ("influence_threshold", "min_sustain")),
+    ):
+        any_slug_varies = False
+        for rows in sweep_by_slug.values():
+            n_by_value = {
+                row[axis]: row["n_candidates"]
+                for row in rows
+                if all(row[o] == shipped[o] for o in others)
+            }
+            if len(n_by_value) > 1 and len(set(n_by_value.values())) > 1:
+                any_slug_varies = True
+                break
+        if not any_slug_varies:
+            raise RuntimeError(
+                f"[{size}] every value of {axis!r} in the grid produces the same n_candidates on "
+                "every prompt -- the grid doesn't span a range that changes anything on the real "
+                "data. Rerun `calibrate_grids.py` against the current corpus before trusting this "
+                "sweep."
+            )
+
+
 def run(cfg: SizeConfig, slugs: list[str] | None, seed: int) -> None:
     if not LABELS_PATH.exists():
         raise SystemExit(f"{LABELS_PATH} missing -- run `python experiment/rhyme_labels.py` first")
     if not cfg.graph_dir.exists():
         raise SystemExit(f"{cfg.graph_dir} missing -- generate graphs for {cfg.size} first")
+    if CALIBRATION is None:
+        raise SystemExit(
+            f"{GRID_CALIBRATION_PATH} missing -- run `python experiment/calibrate_grids.py` first"
+        )
 
     labels = {(r["size"], r["slug"]): r for r in json.loads(LABELS_PATH.read_text())}
 
@@ -486,6 +528,7 @@ def run(cfg: SizeConfig, slugs: list[str] | None, seed: int) -> None:
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    sweep_by_slug: dict[str, list[dict]] = {}
     for slug in targets:
         label = labels.get((cfg.size, slug))
         if label is None:
@@ -496,10 +539,13 @@ def run(cfg: SizeConfig, slugs: list[str] | None, seed: int) -> None:
             continue
 
         results = analyze_slug(cfg, slug, label, seed)
+        sweep_by_slug[slug] = results["sweep"]
 
         out = OUT_DIR / f"threshold_sensitivity_{cfg.size}_{slug}.json"
         out.write_text(json.dumps(results, indent=2))
         print(f"  wrote {out.relative_to(Path(__file__).parent)}")
+
+    check_grid_is_informative(cfg.size, sweep_by_slug)
 
 
 def main() -> None:

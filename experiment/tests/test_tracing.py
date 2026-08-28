@@ -39,6 +39,21 @@ RHYME_STEP = 4
 # dedicated tests below instead of by silently reshaping the golden populations.
 N_LAYERS = 6
 
+FIXTURE_INFLUENCE_THRESHOLD = 0.001
+FIXTURE_CANDIDATE_MIN_SUSTAIN = 0.3
+
+
+@pytest.fixture(autouse=True)
+def pin_calibrated_constants(monkeypatch):
+    """These fixtures encode a fixed story (which feature is a planning
+    candidate, a near miss, etc.) against fixed cutoffs. `tracing`'s real
+    cutoffs come from `grid_calibration.json` now, which is data-dependent and
+    can change on recalibration -- pinning here keeps the golden tests from
+    breaking on a recalibration that has nothing to do with pipeline mechanics.
+    """
+    monkeypatch.setattr(tracing, "INFLUENCE_THRESHOLD", FIXTURE_INFLUENCE_THRESHOLD)
+    monkeypatch.setattr(tracing, "CANDIDATE_MIN_SUSTAIN", FIXTURE_CANDIDATE_MIN_SUSTAIN)
+
 
 def make_node(layer: int, feat: int, influence: float, ctx_idx: int) -> dict:
     return {
@@ -51,6 +66,27 @@ def make_node(layer: int, feat: int, influence: float, ctx_idx: int) -> dict:
         "influence": influence,
         "ctx_idx": ctx_idx,
     }
+
+
+def make_error_node(influence: float, ctx_idx: int) -> dict:
+    return {"feature_type": "mlp reconstruction error", "influence": influence, "ctx_idx": ctx_idx}
+
+
+ERROR_KEY = "error"
+
+
+def cumulative_shares(magnitudes: dict) -> dict:
+    """Real graphs store `influence` as a cumulative share (see
+    `load_raw_step_nodes`), not a magnitude -- fixtures have to be encoded the
+    same way or they exercise a data model the pipeline never actually sees.
+    """
+    ordered = sorted(magnitudes, key=lambda k: -magnitudes[k])
+    total = sum(magnitudes.values())
+    out, running = {}, 0.0
+    for key in ordered:
+        running += magnitudes[key]
+        out[key] = running / total
+    return out
 
 
 @pytest.fixture
@@ -72,11 +108,15 @@ def slug_dir(tmp_path):
     }
     for step in range(N_STEPS):
         ntok = BASE_NTOK + step
-        nodes = [
-            make_node(layer, feat, vals[step], ntok - 1)
-            for (layer, feat), vals in profiles.items()
-            if vals[step] > 0
-        ]
+        step_mags = {key: vals[step] for key, vals in profiles.items() if vals[step] > 0}
+        # Real graphs are always dominated by an `mlp reconstruction error` node,
+        # never a transcoder feature -- included here so the fixture exercises
+        # that invariant instead of silently assuming it away.
+        feature_keys = list(step_mags)
+        step_mags[ERROR_KEY] = 5.0
+        step_shares = cumulative_shares(step_mags)
+        nodes = [make_node(layer, feat, step_shares[(layer, feat)], ntok - 1) for (layer, feat) in feature_keys]
+        nodes.append(make_error_node(step_shares[ERROR_KEY], ntok - 1))
         payload = {
             "metadata": {
                 "prompt": "<bos><start_of_turn>user\n" + "w" * step,

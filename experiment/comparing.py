@@ -81,7 +81,7 @@ def load_all(sizes: list[str]) -> tuple[dict[tuple[str, str], dict], dict[str, i
     return results, rhymes_all
 
 
-MARKERS = ("excludes_last_layer", "selection_percentile_population")
+MARKERS = ("excludes_last_layer", "selection_percentile_population", "grid_calibration_marker")
 
 
 def check_pooling_markers(results: dict[tuple[str, str], dict]) -> None:

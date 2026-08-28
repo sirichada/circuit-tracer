@@ -57,9 +57,7 @@ LABELS_PATH = EXPERIMENT / "rhyme_labels.json"
 RESULTS_DIR = EXPERIMENT / "tracing"
 
 # --- analysis constants (identical across sizes; were duplicated per script) ---
-INFLUENCE_THRESHOLD = 0.001
 CANDIDATE_MIN_RHYME_PERCENTILE = 50.0
-CANDIDATE_MIN_SUSTAIN = 0.3
 EARLY_SPIKE_PERCENTILE = 70.0  # descriptive only -- undefended and unswept
 TOP_N_REPORTED = 15
 
@@ -68,13 +66,25 @@ TOP_N_REPORTED = 15
 # determines the superset this module has to measure: sizing the measurement set
 # against one grid while sweeping another is how coverage gaps appear.
 #
-# Each grid straddles the shipped value. The influence and percentile grids used
-# to be skewed strict (one point below the shipped value, two or three above),
-# which explored the opposite direction from the reviewer concern -- that the
-# cutoffs *discard* real signal. Both are now symmetric.
-INFLUENCE_GRID = (0.00025, 0.0005, 0.001, 0.002, 0.004)
+# INFLUENCE_GRID/SUSTAIN_GRID and their shipped defaults (INFLUENCE_THRESHOLD,
+# CANDIDATE_MIN_SUSTAIN) are p10/p30/p50/p70/p90 of the real corpus, from
+# calibrate_grids.py's output -- not literals, because a fixed number for a
+# quantity whose scale is set by the data silently stops meaning anything the
+# moment the data changes. CALIBRATION is None until that script has run once;
+# every real caller needs the real values, so they fail loudly instead of
+# quietly running on nothing.
+GRID_CALIBRATION_PATH = EXPERIMENT / "grid_calibration.json"
+CALIBRATION = json.loads(GRID_CALIBRATION_PATH.read_text()) if GRID_CALIBRATION_PATH.exists() else None
+
+if CALIBRATION is not None:
+    INFLUENCE_GRID = tuple(CALIBRATION["influence"][f"p{p}"] for p in (10, 30, 50, 70, 90))
+    INFLUENCE_THRESHOLD = CALIBRATION["influence"]["p50"]
+    SUSTAIN_GRID = tuple(CALIBRATION["sustain"][f"p{p}"] for p in (10, 30, 50, 70, 90))
+    CANDIDATE_MIN_SUSTAIN = CALIBRATION["sustain"]["p50"]
+else:
+    INFLUENCE_GRID = INFLUENCE_THRESHOLD = SUSTAIN_GRID = CANDIDATE_MIN_SUSTAIN = None
+
 PERCENTILE_GRID = (30.0, 40.0, 50.0, 60.0, 70.0)
-SUSTAIN_GRID = (0.1, 0.2, 0.3, 0.4, 0.5)
 
 # --- near-miss margins: how far below each cutoff still counts as "just missed" ---
 SUSTAIN_MARGIN = 0.15  # catches sustain_ratio in [0.15, 0.30)
@@ -194,6 +204,12 @@ def load_raw_step_nodes(
 ) -> tuple[dict[int, list[dict]], dict[int, str]]:
     """Every transcoder node in every step above `floor`, with its `ctx_idx`.
 
+    `node["influence"]` is a cumulative share, ascending with rank, not a
+    magnitude -- differencing adjacent values in ascending order recovers each
+    node's own share, exact wherever the surviving population is contiguous.
+    The diff runs over every node in a step before filtering to transcoder, or
+    a skipped non-transcoder node would misattribute its share to a neighbor.
+
     Read once at the loosest floor any caller will use, then filtered in memory
     by `filter_at`. Re-globbing per grid point would parse the same JSON five
     times over.
@@ -211,12 +227,31 @@ def load_raw_step_nodes(
             continue
         data = json.loads(path.read_text())
 
+        all_nodes = [n for n in data.get("nodes", []) if n.get("influence")]
+        all_nodes.sort(key=lambda n: n["influence"])
+
+        # The lowest cumulative value in a step is the single most influential
+        # node's own share, undiluted by a previous node to subtract -- large by
+        # construction, not a reconstruction error. That's only harmless because
+        # it's always an `mlp reconstruction error` node, never a transcoder
+        # feature; nothing else in this function guarantees that stays true.
+        if all_nodes and "transcoder" in all_nodes[0].get("feature_type", ""):
+            raise RuntimeError(
+                f"{path}: the most influential node this step is a transcoder feature, not an "
+                "error node -- its reconstructed share would be orders of magnitude larger than "
+                "a typical feature's, which every downstream percentile/threshold assumes can't "
+                "happen. Check whether that's real before trusting anything from this file."
+            )
+
         rows = []
-        for node in data.get("nodes", []):
+        prev_cum = 0.0
+        for node in all_nodes:
+            cum = node["influence"]
+            share = cum - prev_cum
+            prev_cum = cum
             if "transcoder" not in node.get("feature_type", ""):
                 continue
-            inf = node.get("influence") or 0
-            if inf == 0 or abs(inf) < floor:
+            if share < floor:
                 continue
             layer, feat = parse_node_ids(node)
             if layer is None:
@@ -225,8 +260,7 @@ def load_raw_step_nodes(
                 {
                     "layer": layer,
                     "feat": feat,
-                    "influence": abs(inf),
-                    "raw_inf": inf,
+                    "influence": share,
                     "ctx_idx": node.get("ctx_idx"),
                 }
             )
@@ -796,6 +830,7 @@ def analyze_prompt(cfg: SizeConfig, slug: str, label: dict, verbose: bool = True
             # different candidate definitions. Absent means the old value.
             "excludes_last_layer": True,
             "selection_percentile_population": "measurable",
+            "grid_calibration_marker": CALIBRATION["corpus_marker"],
             "code_version": code_version(),
             "step_keys": list(STEP_KEYS),
             "grids": {
@@ -1107,6 +1142,10 @@ def run(
 ) -> None:
     if not LABELS_PATH.exists():
         raise SystemExit(f"{LABELS_PATH} missing -- run `python experiment/rhyme_labels.py` first")
+    if CALIBRATION is None:
+        raise SystemExit(
+            f"{GRID_CALIBRATION_PATH} missing -- run `python experiment/calibrate_grids.py` first"
+        )
 
     labels = {(r["size"], r["slug"]): r for r in json.loads(LABELS_PATH.read_text())}
 
