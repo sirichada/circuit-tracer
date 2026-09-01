@@ -2,9 +2,11 @@
 
 ## Overview
 
-This project investigates whether transformer language models engage in **advance planning** when generating rhyming couplets. Specifically: when a model generates the second line of a couplet, does it "decide" on the rhyme word before it starts writing (a *planning* feature), or does it only settle on it once it's already writing the word (an *execution* feature)?
+This project investigates whether small LLMs engage in forward planning when generating rhyming couplets. Specifically: when a model generates the second line of a couplet, does it "decide" on the rhyme word before it starts writing (a *planning* feature), or does it only settle on it once it's already writing the word (an *execution* feature)?
 
 The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — using [Gemma-Scope-2](https://huggingface.co/google/gemma-scope-2) transcoders to replace MLP layers with interpretable sparse features. Attribution graphs are built for every generated token across an 11-prompt set, feature timelines are extracted and classified as planning or execution, and causal interventions (feature suppression) measure which features are causally load-bearing for the rhyme.
+
+Code documentation was generated with Claude (Anthropic).
 
 ---
 
@@ -45,8 +47,6 @@ The pipeline runs across three model sizes — Gemma-3 270M, 1B, and 4B — usin
 | rhyme-circuit candidate | A planning feature also active at the rhyme step, at or above the configured influence/percentile/sustain cutoffs. | `candidate_keys()` |
 | `logit_drop` | Drop in the rhyme token's logit when a feature is suppressed at its recorded position. The headline suppression statistic (mean over top k=10) — unlike `prob_drop`, it doesn't saturate once the target probability is near zero. | `downstream_effects_addon.py` |
 | last-layer exclusion | Features in the model's final layer can't affect any later position (no attention layer follows the last MLP), so their suppression effect is always exactly zero. Excluded from every measured population. | `feature_stats(n_layers=...)` |
-
-Code documentation was generated with Claude (Anthropic).
 
 ---
 
